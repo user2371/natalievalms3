@@ -1,0 +1,56 @@
+# --- Залежності ---
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# --- Next.js ---
+/.next/
+/out/
+
+# --- Продакшн-збірка ---
+/build
+
+# --- Prisma ---
+# Генерований клієнт (`prisma generate`) пише в `node_modules/@prisma/client`
+# за замовчуванням (без кастомного `output` у `schema.prisma`) — уже
+# покрито ігноруванням `/node_modules` вище, окремий рядок не потрібен.
+# Самі міграції (`prisma/migrations`) — НЕ ігноруються, мають бути в git.
+
+# --- Змінні середовища ---
+# Реальні секрети (DATABASE_URL, AUTH_SECRET, CLOUDINARY_*, RESEND_*)
+# НЕ мають потрапляти в git. `.env.example` — навмисний виняток нижче:
+# він містить лише формат/порожні значення, це і є документація для
+# нового розробника (див. TASKS_DETAILED.md, Фаза 3+, 05.08.2026).
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
+
+# --- Завантажені користувачем файли (якщо колись зʼявиться локальний диск-фолбек) ---
+/public/uploads
+
+# --- Тести/покриття ---
+/coverage
+
+# --- Логи ---
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# --- TypeScript ---
+*.tsbuildinfo
+next-env.d.ts
+
+# --- Vercel ---
+.vercel
+
+# --- IDE / ОС ---
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+Thumbs.db
