@@ -5,7 +5,7 @@ import { FeaturedCoursePicker } from "@/components/admin/FeaturedCoursePicker";
 import { Button } from "@/components/ui/Button";
 import { GraduationCapIcon } from "@/components/ui/icons";
 import { listCoursesService } from "@/modules/courses";
-
+export const dynamic = 'force-dynamic';
 /**
  * Список курсів в адмінці (задача 0.13.2 → 8.1.1, підключено до реальних
  * даних), за мокапом `adminPanel.png`: таблиця Назва/Slug/Опубліковано/Дії,
