@@ -10,7 +10,7 @@ import { getPublicProfileAction } from "@/modules/profile/actions";
 import { getCertificatesForUserAction } from "@/modules/certificates";
 import type { PublicProfile } from "@/modules/profile/service";
 import type { CertificateEntry } from "@/modules/certificates";
-
+export const dynamic = 'force-dynamic'
 /**
  * Сторінка "Мої сертифікати" (`/certificates`, задача 0.14), за мокапом
  * `MyCertificates.png`.

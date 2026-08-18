@@ -18,7 +18,7 @@ import {
 import type { LeaderboardEntry } from "@/modules/leaderboard";
 import type { Metadata } from "next";
 import Link from "next/link";
-
+export const dynamic = 'force-dynamic'
 export const metadata: Metadata = {
   title: "Рейтинг учениць",
   description:

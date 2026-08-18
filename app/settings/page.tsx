@@ -27,7 +27,7 @@ import { AVATAR_MAX_SIZE_BYTES, AVATAR_ALLOWED_MIME_TYPES } from "@/modules/acco
 import { validateFileBeforeUpload } from "@/lib/images/validateFileBeforeUpload";
 import type { PublicProfile } from "@/modules/profile/service";
 import { cn } from "@/lib/utils";
-
+export const dynamic = 'force-dynamic'
 const BIO_MAX_LENGTH = 500;
 /** Заглушка фото профілю (той самий підхід, що на `/profile`/`/users/[id]`), коли в юзера ще немає завантаженої аватарки. */
 const FALLBACK_PROFILE_PHOTO = "/profileDemoPhoto.jpg";

@@ -2,6 +2,7 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminCommentsList } from "@/components/admin/AdminCommentsList";
 import { listAllCommentsService } from "@/modules/comments";
 
+export const dynamic = 'force-dynamic'
 /**
  * Сторінка "Коментарі" в адмінці (задачі 8.5.1, 8.5.2).
  * Server Component — вантажить реальні коментарі з БД і передає в `AdminCommentsList`.

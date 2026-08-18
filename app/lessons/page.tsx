@@ -10,7 +10,7 @@ import { ArrowLeftIcon, SearchIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 import { LESSONS } from "@/lib/data/lessons";
 import { useLocalProgress } from "@/lib/progress/useLocalProgress";
-
+export const dynamic = 'force-dynamic'
 type StatusFilter = "all" | "completed" | "incomplete";
 
 const STATUS_TABS: { value: StatusFilter; label: string }[] = [

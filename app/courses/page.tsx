@@ -5,7 +5,7 @@ import { CoursesCatalogClient } from "@/components/course/CoursesCatalogClient";
 import { ArrowLeftIcon } from "@/components/ui/icons";
 import { listCoursesService } from "@/modules/courses";
 import { listLessonsService } from "@/modules/lessons";
-
+export const dynamic = 'force-dynamic'
 export const metadata: Metadata = {
   title: "Каталог курсів",
   description:
