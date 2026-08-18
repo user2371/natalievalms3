@@ -22,6 +22,8 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { getPublicProfileAction } from "@/modules/profile/actions";
 import type { PublicProfile } from "@/modules/profile/service";
 
+export const dynamic = 'force-dynamic';
+
 /** Заглушка обкладинки курсу (той самий підхід, що на `/profile`/`/users/[id]`), коли `Course.coverImage` не задано в адмінці. */
 const FALLBACK_COURSE_COVER = "/heroImage.png";
 
