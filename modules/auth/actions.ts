@@ -122,6 +122,14 @@ export async function loginUserAction(input: LoginInput) {
       if (validated.success) {
         recordFailedLoginAttempt(validated.data.email.toLowerCase());
       }
+      // Тимчасове діагностичне логування (F.20+, дебаг CredentialsSignin
+      // на /lessons/[slug]): `err.type` тут — офіційна категорія Auth.js
+      // ("CredentialsSignin" і т.д.), але `authorize()` у `auth.ts` може
+      // кинути й ІНШУ помилку (напр. збій Prisma/БД), яку Auth.js теж
+      // іноді загортає в `CredentialsSignin` — без логу справжню причину
+      // видно лише тут, у `err.cause`, а не в повідомленні, яке бачить
+      // користувач.
+      console.error("[loginUserAction] AuthError:", err.type, err.cause ?? err);
       switch (err.type) {
         case "CredentialsSignin":
           return { success: false, error: "Невірний email або пароль" };

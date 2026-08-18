@@ -1,7 +1,8 @@
 "use client";
 
-import { use, useState } from "react";
+import { use } from "react";
 import { notFound } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Header } from "@/components/layout/Header";
 import { LessonSidebar } from "@/components/lesson/LessonSidebar";
 import { LessonContentHeader } from "@/components/lesson/LessonContentHeader";
@@ -11,7 +12,6 @@ import { LessonArticleBlock } from "@/components/lesson/LessonArticleBlock";
 import { QuizBlock } from "@/components/lesson/QuizBlock";
 import { CommentsBlock } from "@/components/lesson/CommentsBlock";
 import { LESSONS, youtubeThumbnail } from "@/lib/data/lessons";
-import { DEMO_PROFILE } from "@/lib/data/profile";
 import { useLocalProgress } from "@/lib/progress/useLocalProgress";
 
 interface LessonPageProps {
@@ -20,7 +20,9 @@ interface LessonPageProps {
 
 export default function LessonPage({ params }: LessonPageProps) {
   const { slug } = use(params);
-  const [loggedIn, setLoggedIn] = useState(false);
+  const { data: session } = useSession();
+  const loggedIn = !!session?.user;
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "ADMIN";
   const { completedSlugs, markComplete } = useLocalProgress();
 
   const lesson = LESSONS.find((item) => item.slug === slug);
@@ -30,10 +32,7 @@ export default function LessonPage({ params }: LessonPageProps) {
 
   return (
     <div className="flex flex-1 flex-col">
-      <Header
-        user={loggedIn ? { name: "Марія Шевченко", avatarUrl: null } : null}
-        onLogout={() => setLoggedIn(false)}
-      />
+      <Header />
 
       <main className="flex-1 py-8 sm:py-10">
         <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 px-6 lg:grid-cols-[320px_1fr]">
@@ -74,7 +73,7 @@ export default function LessonPage({ params }: LessonPageProps) {
             <CommentsBlock
               lessonSlug={lesson.slug}
               loggedIn={loggedIn}
-              isAdmin={DEMO_PROFILE.role === "ADMIN"}
+              isAdmin={isAdmin}
               className="mt-6"
             />
           </div>
