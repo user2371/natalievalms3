@@ -16,6 +16,8 @@ import { getCertificatesForUserAction } from "@/modules/certificates";
 import type { PublicProfile } from "@/modules/profile/service";
 import type { CertificateEntry } from "@/modules/certificates";
 
+export const dynamic = 'force-dynamic';
+
 const VISIBLE_CERTIFICATES = 5;
 /** Заглушка для великого "фото" в `ProfileHero`, коли в реального юзера немає `avatarUrl` (той самий підхід, що вже на `/users/[id]`, задача 6.6.18). */
 const FALLBACK_PROFILE_PHOTO = "/profileDemoPhoto.jpg";
