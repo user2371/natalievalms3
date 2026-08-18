@@ -19,7 +19,7 @@ import { getPublicProfileAction } from "@/modules/profile/actions";
 import { getLessonsWithCompletionAction } from "@/modules/lessons";
 import type { PublicProfile, PublicHomeworkVideo } from "@/modules/profile/service";
 import type { LessonWithCompletion } from "@/modules/lessons";
-
+export const dynamic = 'force-dynamic'
 /** Заглушка обкладинки курсу (той самий підхід, що на `/profile`/`/homework`), коли `Course.coverImage` не задано в адмінці. */
 const FALLBACK_COURSE_COVER = "/heroImage.png";
 
