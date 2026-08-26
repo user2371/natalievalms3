@@ -10,6 +10,16 @@ import * as service from "./service";
  * `modules/comments/actions.ts` (задачі 6.5.4/6.5.5) — Next.js server
  * actions, викликають лише `service.ts`, той самий поділ, що й у
  * `modules/quizzes/actions.ts`.
+ *
+ * `revalidatePath("/courses/[slug]/lessons/[lessonId]", "page")` — ВИПРАВЛЕНО
+ * (було `revalidatePath("/lessons")`, шлях старої ДЕМО-сторінки без
+ * `RealCommentsBlock`; реальна сторінка з коментарями — `/courses/[slug]/
+ * lessons/[lessonId]`). Той самий шаблон динамічного `revalidatePath` для
+ * цього маршруту вже застосований у `modules/account/actions.ts`. Без
+ * правильного шляху баг не проявлявся локально (Next.js dev-сервер не
+ * кешує сторінки так жорстко), але ставав помітним після `next build`/
+ * деплою на Vercel (production full route cache) — нові коментарі не
+ * зʼявлялись при перезавантаженні сторінки чи в інших сесіях.
  */
 
 /**
@@ -42,7 +52,7 @@ export async function addCommentAction(input: CreateCommentInput) {
 
     const comment = await service.addCommentService(userId, input);
     recordCommentAttempt(userId);
-    revalidatePath("/lessons");
+    revalidatePath("/courses/[slug]/lessons/[lessonId]", "page");
     return { success: true as const, comment, error: null };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Не вдалося додати коментар";
@@ -65,7 +75,7 @@ export async function deleteCommentAction(input: DeleteCommentInput) {
     }
 
     const comment = await service.deleteCommentService(userId, role ?? "USER", input);
-    revalidatePath("/lessons");
+    revalidatePath("/courses/[slug]/lessons/[lessonId]", "page");
     return { success: true as const, comment, error: null };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Не вдалося видалити коментар";
@@ -88,7 +98,7 @@ export async function reactToCommentAction(input: ReactToCommentInput) {
     }
 
     const result = await service.reactToCommentService(userId, input);
-    revalidatePath("/lessons");
+    revalidatePath("/courses/[slug]/lessons/[lessonId]", "page");
     return { success: true as const, ...result, error: null };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Не вдалося зберегти реакцію";
