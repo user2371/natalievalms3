@@ -155,6 +155,12 @@ function toCardComment(
  *     каскад робить `onDelete: Cascade`, F.25.1).
  *   - `AdminConfirmDeleteModal` отримує `warning`, якщо в коментаря, що
  *     видаляється, є відповіді — скільки їх теж буде видалено (F.25.10.2).
+ *   - Кнопка "Відповісти" є і на кореневому коментарі, і на кожній
+ *     відповіді (не лише на корені) — клік на відповіді відкриває форму
+ *     ПІД НЕЮ з `parentId = reply.id`; сервер (`addCommentService`,
+ *     F.25.4) однаково "спрощує" це до `parentId = root.id`, тож
+ *     результат завжди лишається одного рівня глибини — просто
+ *     користувачу зручніше відповідати саме тій репліці, яку він читає.
  */
 export function RealCommentsBlock({
   lessonId,
@@ -422,21 +428,33 @@ export function RealCommentsBlock({
                 )}
 
                 {replies.map((reply) => (
-                  <CommentCard
-                    key={reply.id}
-                    comment={toCardComment(
-                      reply,
-                      currentUserId,
-                      isAdmin,
-                      myReactions[reply.id] ?? null,
+                  <div key={reply.id} className="flex flex-col gap-4">
+                    <CommentCard
+                      comment={toCardComment(
+                        reply,
+                        currentUserId,
+                        isAdmin,
+                        myReactions[reply.id] ?? null,
+                      )}
+                      loggedIn={loggedIn}
+                      isReply
+                      onReact={handleReact}
+                      onRequireLogin={() => openAuthModal("login")}
+                      onDelete={setPendingDeleteId}
+                      onReply={(id) =>
+                        setReplyToId((prev) => (prev === id ? null : id))
+                      }
+                      reactionPending={pendingReactionId === reply.id}
+                    />
+
+                    {replyToId === reply.id && (
+                      <div className="ml-20">
+                        <CommentForm
+                          onSubmit={(text) => handleAddComment(text, reply.id)}
+                        />
+                      </div>
                     )}
-                    loggedIn={loggedIn}
-                    isReply
-                    onReact={handleReact}
-                    onRequireLogin={() => openAuthModal("login")}
-                    onDelete={setPendingDeleteId}
-                    reactionPending={pendingReactionId === reply.id}
-                  />
+                  </div>
                 ))}
               </div>
             ))}
