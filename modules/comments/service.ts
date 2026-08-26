@@ -32,6 +32,17 @@ export async function listAllCommentsService(options?: {
  * конкретного `userId` (з сесії — перевірка авторизації в `actions.ts`,
  * задача 6.5.4, той самий принцип, що й у `modules/quizzes/actions.ts`:
  * service не знає про сесію, лише отримує вже перевірений `userId`).
+ *
+ * F.25.4: якщо `parentId` заданий — перевіряємо, що батьківський коментар
+ * існує і належить ТОМУ Ж `lessonId`, що й новий коментар (захист від
+ * підстановки чужого `commentId` з іншого уроку через прямий виклик дії,
+ * той самий принцип "не тільки в UI", що вже в `deleteCommentService`).
+ *
+ * Глибина вкладеності обмежена одним рівнем (рішення з F.25.10.1, поки
+ * дефолтне): якщо батьківський коментар сам є відповіддю
+ * (`parent.parentId !== null`), новий коментар "спрощується" до кореня —
+ * записується з `parentId = parent.parentId`, а не `parent.id`, щоб гілки
+ * лишались рівно одного рівня глибини.
  */
 export async function addCommentService(userId: string, input: CreateCommentInput) {
   const parsed = CreateCommentSchema.safeParse(input);
@@ -39,10 +50,25 @@ export async function addCommentService(userId: string, input: CreateCommentInpu
     throw new Error(parsed.error.issues[0]?.message || "Некоректні дані коментаря");
   }
 
+  let parentId: string | null = parsed.data.parentId ?? null;
+
+  if (parentId) {
+    const parent = await repository.findById(parentId);
+    if (!parent) {
+      throw new Error("Батьківський коментар не знайдено");
+    }
+    if (parent.lessonId !== parsed.data.lessonId) {
+      throw new Error("Батьківський коментар належить іншому уроку");
+    }
+
+    parentId = parent.parentId !== null ? parent.parentId : parent.id;
+  }
+
   return repository.create({
     lessonId: parsed.data.lessonId,
     userId,
     content: parsed.data.content,
+    parentId,
   });
 }
 

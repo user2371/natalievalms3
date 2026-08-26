@@ -21,6 +21,7 @@ function mapComment(raw: {
   id: string;
   lessonId: string;
   userId: string;
+  parentId: string | null;
   content: string;
   createdAt: Date;
   user: {
@@ -37,6 +38,7 @@ function mapComment(raw: {
     id: raw.id,
     lessonId: raw.lessonId,
     userId: raw.userId,
+    parentId: raw.parentId,
     content: raw.content,
     createdAt: raw.createdAt,
     author: raw.user,
@@ -99,6 +101,7 @@ export interface CreateCommentData {
   lessonId: string;
   userId: string;
   content: string;
+  parentId: string | null;
 }
 
 export async function create(data: CreateCommentData): Promise<Comment> {
@@ -107,6 +110,7 @@ export async function create(data: CreateCommentData): Promise<Comment> {
       lessonId: data.lessonId,
       userId: data.userId,
       content: data.content,
+      parentId: data.parentId,
     },
     include: {
       user: { select: AUTHOR_SELECT },
@@ -117,11 +121,16 @@ export async function create(data: CreateCommentData): Promise<Comment> {
   return mapComment(row);
 }
 
-/** Лише для перевірки авторства/існування перед видаленням (задача 6.5.5) — без зайвих include. */
+/**
+ * Лише для перевірки авторства/існування перед видаленням (задача 6.5.5) —
+ * без зайвих include. `parentId` додано в F.25.4: потрібен, щоб
+ * `addCommentService` перевірив, чи батьківський коментар сам є
+ * відповіддю (спрощення глибини вкладеності до одного рівня).
+ */
 export async function findById(id: string) {
   return prisma.comment.findUnique({
     where: { id },
-    select: { id: true, userId: true, lessonId: true },
+    select: { id: true, userId: true, lessonId: true, parentId: true },
   });
 }
 

@@ -4248,3 +4248,26 @@ SVG.
 `modules/users/schema.ts`, `modules/users/repository.ts`,
 `modules/users/service.ts`, `modules/users/actions.ts`,
 `components/admin/AdminUsersTable.tsx`, `TASKS_DETAILED.md`.
+
+## F.25 — План: "Відповісти" на коментар (гілки) (26.08.2026, ЛИШЕ ПЛАН)
+
+Прохання користувача: можливість відповісти на конкретний коментар,
+з візуальним прив'язуванням відповіді ПІД відповідним коментарем
+незалежно від того, коли її залишили. Розвідано код (`Comment` у
+Prisma-схемі й `modules/comments` наразі не має `parentId`/поняття
+"відповідь" узагалі) і розписано детальний покроковий план у
+`TASKS_DETAILED.md`, розділ "F.25" (у самому кінці файлу): нова
+self-relation у Prisma (`parentId`), шари
+schema/repository/service/actions, спільна функція групування
+плаского списку коментарів у дерево (кореневі + їхні відповіді,
+сортовані окремо), нова кнопка "Відповісти" й візуальний відступ у
+`CommentCard`, підключення в `RealCommentsBlock`. Явно поза
+планом — старий localStorage-шлях коментарів (`CommentsBlock`/
+`useLocalComments`/`commentsSlice`, демо-уроки).
+
+**За прямим проханням користувача код НЕ писався** — лише
+задокументований план (`TASKS_DETAILED.md`, F.25.1–F.25.10) з
+відкритими питаннями до власниці (глибина вкладеності, поведінка
+каскадного видалення відповідей, межі пагінації "Показати ще").
+
+**Файли:** `TASKS_DETAILED.md`, `IMPLEMENTATION_STATUS.md`.

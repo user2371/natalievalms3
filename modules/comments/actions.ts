@@ -22,6 +22,11 @@ import * as service from "./service";
  * до БД для завідомо відхиленого коментаря; лічильник оновлюється лише
  * після УСПІШНОГО додавання (невдала спроба через валідацію не "з'їдає"
  * ліміт користувача).
+ *
+ * F.25.5: `parentId` (відповідь на коментар) уже частина `CreateCommentInput`
+ * (F.25.2) — прокидається в `service.addCommentService` разом з рештою
+ * `input`, без додаткової логіки тут; уся перевірка (існування батька,
+ * той самий урок, спрощення глибини) — у `service.ts` (F.25.4).
  */
 export async function addCommentAction(input: CreateCommentInput) {
   try {

@@ -431,6 +431,16 @@ export function ChatIcon(props: IconProps) {
   );
 }
 
+/** F.25.7: іконка "відповісти" на коментар (стрілка "corner-down-left"). */
+export function ReplyIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="m9 17-6-6 6-6" />
+      <path d="M3 11h12a5 5 0 0 1 5 5v3" />
+    </svg>
+  );
+}
+
 export function TrendingUpIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

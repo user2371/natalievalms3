@@ -10,6 +10,7 @@ import { GuestCommentBanner } from "@/components/lesson/GuestCommentBanner";
 import { CommentCard } from "@/components/lesson/CommentCard";
 import { AdminConfirmDeleteModal } from "@/components/admin/AdminConfirmDeleteModal";
 import { useAuthModal } from "@/components/auth/AuthModalContext";
+import { buildCommentTree } from "@/lib/comments/buildCommentTree";
 import {
   addCommentAction,
   deleteCommentAction,
@@ -43,6 +44,20 @@ const NETWORK_ERROR_MESSAGE = "Проблема з мережею. Переві�
 function authorDisplayName(author: Comment["author"]): string {
   if (author.nickname) return author.nickname;
   return `${author.firstName}${author.lastName ? ` ${author.lastName}` : ""}`;
+}
+
+/**
+ * F.25.9/F.25.10.2: узгодження слова "відповідь" з кількістю для тексту
+ * попередження в `AdminConfirmDeleteModal` (українська плюралізація —
+ * 1/21/31… "відповідь", 2-4/22-24… "відповіді", решта "відповідей").
+ */
+function repliesWord(count: number): string {
+  const mod100 = count % 100;
+  const mod10 = count % 10;
+  if (mod100 >= 11 && mod100 <= 14) return "відповідей";
+  if (mod10 === 1) return "відповідь";
+  if (mod10 >= 2 && mod10 <= 4) return "відповіді";
+  return "відповідей";
 }
 
 /**
@@ -83,7 +98,6 @@ function toCardComment(
     deletableAsAdmin: !isOwn && isAdmin,
   };
 }
-
 /**
  * Обгортка над `CommentsBlock`-компонентами (`CommentForm`/
  * `GuestCommentBanner`/`CommentCard`, ПЕРЕВИКОРИСТАНІ без змін) — для
@@ -123,6 +137,24 @@ function toCardComment(
  *   `onReact`) — `reactToCommentAction` для гостя взагалі не викликається.
  * - **6.5.26**: лічильники likes/dislikes і підсвітка кнопки міняються
  *   ОДРАЗУ (оптимістично, до відповіді сервера), з відкатом при помилці.
+ * - **F.25.9**: відповіді на коментарі (self-relation `parentId`,
+ *   F.25.1–F.25.8):
+ *   - `handleAddComment(text, parentId?)` — оптимістичний коментар отримує
+ *     `parentId` замість завжди `null`; масив `comments` (плаский, як і
+ *     зараз) просто поповнюється — усе групування (`buildCommentTree`,
+ *     F.25.6) відбувається під час рендеру.
+ *   - `commentTree = buildCommentTree(sortedComments)` рахується від
+ *     УСЬОГО масиву `comments`, ще ДО обрізання `visibleCount`.
+ *   - `visibleCount`/"Показати ще" рахує КОРЕНЕВІ коментарі (як і
+ *     раніше), але кожен показаний кореневий рендериться РАЗОМ з усіма
+ *     своїми відповідями — вони не входять у ліміт `VISIBLE_STEP` (див.
+ *     відкрите питання F.25.10.3 в TASKS_DETAILED.md).
+ *   - Видалення кореневого коментаря з відповідями прибирає з масиву
+ *     `comments` і сам коментар, і всі його `replies` разом (локальний
+ *     optimistic rollback не лишає "осиротілих" відповідей; на сервері
+ *     каскад робить `onDelete: Cascade`, F.25.1).
+ *   - `AdminConfirmDeleteModal` отримує `warning`, якщо в коментаря, що
+ *     видаляється, є відповіді — скільки їх теж буде видалено (F.25.10.2).
  */
 export function RealCommentsBlock({
   lessonId,
@@ -143,6 +175,10 @@ export function RealCommentsBlock({
   // лайк/дизлайк, поки попередній запит ще в польоті (той самий commentId —
   // друга кнопка тієї ж пари теж блокується, бо вони взаємовиключні).
   const [pendingReactionId, setPendingReactionId] = useState<string | null>(null);
+  // F.25.9: яка картка зараз відкрита для inline-форми відповіді — підйом
+  // стану сюди (не в `CommentCard`), той самий принцип, що вже застосований
+  // для видалення (`pendingDeleteId`).
+  const [replyToId, setReplyToId] = useState<string | null>(null);
 
   const loggedIn = status === "authenticated";
   const currentUserId = session?.user?.id;
@@ -155,10 +191,20 @@ export function RealCommentsBlock({
       b.createdAt instanceof Date ? b.createdAt.getTime() : Date.parse(b.createdAt);
     return bTime - aTime;
   });
-  const visibleComments = sortedComments.slice(0, visibleCount);
-  const remaining = sortedComments.length - visibleComments.length;
+  // F.25.9: дерево рахується від УСЬОГО масиву коментарів, ще ДО обрізання
+  // `visibleCount` — інакше відповідь могла б "не влізти" у видиму частину
+  // разом зі своїм коренем.
+  const commentTree = buildCommentTree(sortedComments);
+  const visibleTree = commentTree.slice(0, visibleCount);
+  const remaining = commentTree.length - visibleTree.length;
 
-  async function handleAddComment(text: string) {
+  // F.25.9: коментар, що зараз на видаленні (для `AdminConfirmDeleteModal`,
+  // щоб порахувати відповіді для попередження, F.25.10.2).
+  const pendingDeleteRepliesCount = pendingDeleteId
+    ? comments.filter((comment) => comment.parentId === pendingDeleteId).length
+    : 0;
+
+  async function handleAddComment(text: string, parentId: string | null = null) {
     if (!session?.user?.id) return;
     setFormError(null);
 
@@ -167,6 +213,7 @@ export function RealCommentsBlock({
       id: optimisticId,
       lessonId,
       userId: session.user.id,
+      parentId,
       content: text,
       createdAt: new Date(),
       author: {
@@ -182,9 +229,10 @@ export function RealCommentsBlock({
     };
 
     setComments((prev) => [optimisticComment, ...prev]);
+    if (parentId) setReplyToId(null);
 
     try {
-      const result = await addCommentAction({ lessonId, content: text });
+      const result = await addCommentAction({ lessonId, content: text, parentId });
       if (result.success && result.comment) {
         const savedComment = result.comment;
         setComments((prev) =>
@@ -211,7 +259,13 @@ export function RealCommentsBlock({
 
     setPendingDeleteId(null);
     setDeleteError(null);
-    setComments((prev) => prev.filter((comment) => comment.id !== id));
+    // F.25.9: видалення кореневого коментаря прибирає локально і сам
+    // коментар, і всі його відповіді (на сервері те саме робить
+    // `onDelete: Cascade`, F.25.1) — інакше до відповіді сервера чи після
+    // rollback-помилки в UI лишились би "осиротілі" відповіді.
+    setComments((prev) =>
+      prev.filter((comment) => comment.id !== id && comment.parentId !== id),
+    );
 
     try {
       const result = await deleteCommentAction({ id });
@@ -342,21 +396,49 @@ export function RealCommentsBlock({
       ) : (
         <>
           <div className="mt-5 flex flex-col gap-5">
-            {visibleComments.map((comment) => (
-              <CommentCard
-                key={comment.id}
-                comment={toCardComment(
-                  comment,
-                  currentUserId,
-                  isAdmin,
-                  myReactions[comment.id] ?? null,
+            {visibleTree.map(({ root, replies }) => (
+              <div key={root.id} className="flex flex-col gap-4">
+                <CommentCard
+                  comment={toCardComment(
+                    root,
+                    currentUserId,
+                    isAdmin,
+                    myReactions[root.id] ?? null,
+                  )}
+                  loggedIn={loggedIn}
+                  onReact={handleReact}
+                  onRequireLogin={() => openAuthModal("login")}
+                  onDelete={setPendingDeleteId}
+                  onReply={(id) => setReplyToId((prev) => (prev === id ? null : id))}
+                  reactionPending={pendingReactionId === root.id}
+                />
+
+                {replyToId === root.id && (
+                  <div className="ml-10">
+                    <CommentForm
+                      onSubmit={(text) => handleAddComment(text, root.id)}
+                    />
+                  </div>
                 )}
-                loggedIn={loggedIn}
-                onReact={handleReact}
-                onRequireLogin={() => openAuthModal("login")}
-                onDelete={setPendingDeleteId}
-                reactionPending={pendingReactionId === comment.id}
-              />
+
+                {replies.map((reply) => (
+                  <CommentCard
+                    key={reply.id}
+                    comment={toCardComment(
+                      reply,
+                      currentUserId,
+                      isAdmin,
+                      myReactions[reply.id] ?? null,
+                    )}
+                    loggedIn={loggedIn}
+                    isReply
+                    onReact={handleReact}
+                    onRequireLogin={() => openAuthModal("login")}
+                    onDelete={setPendingDeleteId}
+                    reactionPending={pendingReactionId === reply.id}
+                  />
+                ))}
+              </div>
             ))}
           </div>
 
@@ -381,6 +463,11 @@ export function RealCommentsBlock({
         onClose={() => setPendingDeleteId(null)}
         onConfirm={handleConfirmDelete}
         entityLabel="коментар"
+        warning={
+          pendingDeleteRepliesCount > 0
+            ? `Разом з ним буде видалено ${pendingDeleteRepliesCount} ${repliesWord(pendingDeleteRepliesCount)} на нього.`
+            : undefined
+        }
       />
     </Card>
   );

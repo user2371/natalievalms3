@@ -17,6 +17,10 @@ export const CreateCommentSchema = z.object({
     .trim()
     .min(1, "Коментар не може бути порожнім")
     .max(2000, "Коментар занадто довгий (максимум 2000 символів)"),
+  // F.25.2: опційний parentId — відповідь на інший коментар (self-relation
+  // на Prisma-моделі Comment, F.25.1). `.nullable()` — щоб клієнт міг явно
+  // передати null (не лише не передавати поле взагалі).
+  parentId: z.string().min(1).nullable().optional(),
 });
 
 export const DeleteCommentSchema = z.object({
@@ -52,6 +56,7 @@ export interface Comment {
   id: string;
   lessonId: string;
   userId: string;
+  parentId: string | null;
   content: string;
   createdAt: Date;
   author: CommentAuthor;
