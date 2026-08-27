@@ -10,6 +10,10 @@ import { CertificateThumbnail } from "@/components/certificates/CertificateThumb
 import { HomeworkVideoCard } from "@/components/profile/HomeworkVideoCard";
 import { CourseProgressRow } from "@/components/profile/CourseProgressRow";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { ProfileHeroSkeleton } from "@/components/skeletons/ProfileHeroSkeleton";
+import { CertificateThumbnailSkeleton } from "@/components/skeletons/CertificateThumbnailSkeleton";
+import { ListRowSkeleton } from "@/components/skeletons/ListRowSkeleton";
 import { ArrowRightIcon } from "@/components/ui/icons";
 import { getPublicProfileAction } from "@/modules/profile/actions";
 import { getCertificatesForUserAction } from "@/modules/certificates";
@@ -137,8 +141,43 @@ export default function ProfilePage() {
   const homeworkVideos = profile?.homeworkVideos ?? [];
   const completedCourses = profile?.completedCourses ?? [];
 
-  if (status === "loading") {
-    return null;
+  // ФАЗА SKELETON, задача SKEL.6: раніше `status === "loading"` рендерив
+  // порожній `null` — секунда-дві білого екрана між переходом на сторінку
+  // й тим, як Auth.js встигне синхронно віддати сесію з кешу/кукі. Тепер —
+  // той самий `AccountLayout` (з гостьовим `user={null}` до моменту, поки
+  // сесія не резолвиться) зі скелетон-контентом замість дітей.
+  // `profileLoading` — другий, окремий проміжок: сесія вже відома
+  // (`loggedIn === true`), але `getPublicProfileAction`/
+  // `getCertificatesForUserAction` (окремий `useEffect` вище) ще не
+  // повернули дані — `profile` лишається `null` до першого success.
+  const sessionLoading = status === "loading";
+  const profileLoading = loggedIn && profile === null;
+
+  if (sessionLoading || profileLoading) {
+    return (
+      <AccountLayout user={loggedIn ? { name: displayName, avatarUrl } : null}>
+        <h1 className="font-serif text-3xl text-ink sm:text-4xl">Мій профіль</h1>
+        <ProfileHeroSkeleton className="mt-6" />
+
+        <section className="mt-10">
+          <Skeleton className="h-6 w-32" />
+          <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <CertificateThumbnailSkeleton key={i} />
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-10">
+          <Skeleton className="h-6 w-56" />
+          <div className="mt-5 flex flex-col gap-1 divide-y divide-cream-soft">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <ListRowSkeleton key={i} />
+            ))}
+          </div>
+        </section>
+      </AccountLayout>
+    );
   }
 
   if (!loggedIn) {

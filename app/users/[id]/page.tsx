@@ -11,6 +11,9 @@ import { CertificateThumbnail } from "@/components/certificates/CertificateThumb
 import { HomeworkVideoCard } from "@/components/profile/HomeworkVideoCard";
 import { CourseProgressRow } from "@/components/profile/CourseProgressRow";
 import { Button } from "@/components/ui/Button";
+import { ProfileHeroSkeleton } from "@/components/skeletons/ProfileHeroSkeleton";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { CertificateThumbnailSkeleton } from "@/components/skeletons/CertificateThumbnailSkeleton";
 import { EditIcon, ArrowRightIcon } from "@/components/ui/icons";
 import { getPublicProfileAction } from "@/modules/profile/actions";
 import { getCertificatesForUserAction } from "@/modules/certificates";
@@ -99,13 +102,31 @@ export default function UserProfilePage({ params }: UserProfilePageProps) {
   }, [id]);
 
   if (profile === undefined) {
-    // Завантаження — коротка мовчазна пауза (без спінера), той самий
-    // мінімалізм, що й в інших "клієнтських острівцях" цього проєкту.
+    // ФАЗА SKELETON, задача SKEL.6.1: раніше — порожній `<div />`
+    // (мовчазна пауза без жодного натяку на форму майбутнього контенту).
+    // На цьому етапі ще невідомо, чи це власний профіль, чи чужий (це
+    // з'ясовується лише ПІСЛЯ відповіді `getPublicProfileAction`, разом
+    // із самими даними), тому скелетон навмисно НЕ обгортається в
+    // `AccountLayout` — той самий нейтральний каркас `Header` + контент,
+    // що й гілка "чужого профілю" нижче, підходить для обох випадків
+    // без "стрибка" сайдбару, який міг би з'явитись/зникнути одразу
+    // після завантаження.
     return (
       <div className="flex flex-1 flex-col">
         <Header />
         <main className="flex-1 py-8 pb-16 sm:py-10">
-          <div className="mx-auto max-w-5xl px-6" />
+          <div className="mx-auto max-w-5xl px-6">
+            <Skeleton className="h-8 w-56" />
+            <ProfileHeroSkeleton className="mt-6" />
+            <div className="mt-10">
+              <Skeleton className="h-6 w-32" />
+              <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <CertificateThumbnailSkeleton key={i} />
+                ))}
+              </div>
+            </div>
+          </div>
         </main>
       </div>
     );

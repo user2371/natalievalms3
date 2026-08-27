@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { AccountLayout } from "@/components/account/AccountLayout";
 import { GuestGate } from "@/components/account/GuestGate";
+import { AccountPageSkeleton } from "@/components/skeletons/AccountPageSkeleton";
 import { HomeworkVideoCard } from "@/components/profile/HomeworkVideoCard";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -91,8 +92,15 @@ export default function MyLearningPage() {
   const homeworkVideos = profile?.homeworkVideos ?? [];
   const hasStarted = completedCourses.length > 0;
 
-  if (status === "loading") {
-    return null;
+  // ФАЗА SKELETON, задача SKEL.7: та сама заміна `return null`, що на
+  // `/profile` (SKEL.6) — і на час резолву сесії, і на час першого
+  // запиту `getPublicProfileAction` (`profile === null`).
+  if (status === "loading" || (loggedIn && profile === null)) {
+    return (
+      <AccountLayout user={loggedIn ? { name: session?.user?.name ?? "", avatarUrl: null } : null}>
+        <AccountPageSkeleton rows={3} />
+      </AccountLayout>
+    );
   }
 
   if (!loggedIn) {

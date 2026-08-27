@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { AccountLayout } from "@/components/account/AccountLayout";
 import { GuestGate } from "@/components/account/GuestGate";
+import { AccountPageSkeleton } from "@/components/skeletons/AccountPageSkeleton";
 import { HomeworkVideoCard } from "@/components/profile/HomeworkVideoCard";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -105,8 +106,15 @@ export default function HomeworkPage() {
     profile?.avatarUrl ??
     null;
 
-  if (status === "loading") {
-    return null;
+  // ФАЗА SKELETON, задача SKEL.7: див. `/profile` (SKEL.6) — той самий
+  // принцип, `profile === null` покриває проміжок запиту
+  // `getPublicProfileAction` після того, як сесія вже відома.
+  if (status === "loading" || (loggedIn && profile === null)) {
+    return (
+      <AccountLayout user={loggedIn ? { name: displayName, avatarUrl } : null}>
+        <AccountPageSkeleton rows={4} />
+      </AccountLayout>
+    );
   }
 
   if (!loggedIn) {

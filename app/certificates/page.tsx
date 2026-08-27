@@ -6,6 +6,8 @@ import { useSession } from "next-auth/react";
 import { AccountLayout } from "@/components/account/AccountLayout";
 import { GuestGate } from "@/components/account/GuestGate";
 import { CertificatesPageContent } from "@/components/certificates/CertificatesPageContent";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { CertificateThumbnailSkeleton } from "@/components/skeletons/CertificateThumbnailSkeleton";
 import { getPublicProfileAction } from "@/modules/profile/actions";
 import { getCertificatesForUserAction } from "@/modules/certificates";
 import type { PublicProfile } from "@/modules/profile/service";
@@ -63,8 +65,24 @@ export default function CertificatesPage() {
     profile?.avatarUrl ??
     null;
 
-  if (status === "loading") {
-    return null;
+  // ФАЗА SKELETON, задача SKEL.7: див. `/profile` (SKEL.6). Тут
+  // "картка-лічильник" + сітка `CertificateThumbnailSkeleton` (той самий
+  // компонент, що вже на `/profile`) — на час резолву сесії й на час
+  // `getCertificatesForUserAction`.
+  if (status === "loading" || (loggedIn && certificates.length === 0 && profile === null)) {
+    return (
+      <AccountLayout user={loggedIn ? { name: displayName, avatarUrl } : null}>
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="mt-4 h-8 w-56" />
+        <Skeleton className="mt-2 h-4 w-full max-w-md" />
+        <Skeleton className="mt-6 h-20 w-full max-w-xs rounded-2xl" />
+        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <CertificateThumbnailSkeleton key={i} />
+          ))}
+        </div>
+      </AccountLayout>
+    );
   }
 
   if (!loggedIn) {

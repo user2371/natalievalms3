@@ -4,6 +4,7 @@ import { useEffect, useState, type ChangeEvent } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { AccountLayout } from "@/components/account/AccountLayout";
 import { GuestGate } from "@/components/account/GuestGate";
+import { AccountPageSkeleton } from "@/components/skeletons/AccountPageSkeleton";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
@@ -479,8 +480,19 @@ export default function SettingsPage() {
     }
   }
 
-  if (status === "loading") {
-    return null;
+  // ФАЗА SKELETON, задача SKEL.7: див. `/profile` (SKEL.6). Форма
+  // "Налаштування" не має власного list-based скелетону — тут
+  // `AccountPageSkeleton` слугує нейтральною заглушкою "тут буде форма",
+  // без спроби відтворити кожне поле окремо (полів забагато й вони надто
+  // різнорідні — фото/біо/email/пароль/видалення акаунта — щоб один
+  // скелетон їх усі точно повторював; ризик "скелетон бреше про форму"
+  // тут вищий за користь від точної відповідності).
+  if (status === "loading" || (loggedIn && profile === null)) {
+    return (
+      <AccountLayout user={loggedIn ? { name: session?.user?.name ?? "", avatarUrl: null } : null}>
+        <AccountPageSkeleton rows={4} />
+      </AccountLayout>
+    );
   }
 
   if (!loggedIn) {

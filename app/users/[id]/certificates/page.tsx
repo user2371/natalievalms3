@@ -7,6 +7,8 @@ import { useSession } from "next-auth/react";
 import { Header } from "@/components/layout/Header";
 import { AccountLayout } from "@/components/account/AccountLayout";
 import { CertificatesPageContent } from "@/components/certificates/CertificatesPageContent";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { CertificateThumbnailSkeleton } from "@/components/skeletons/CertificateThumbnailSkeleton";
 import { getPublicProfileAction } from "@/modules/profile/actions";
 import { getCertificatesForUserAction } from "@/modules/certificates";
 import type { PublicProfile } from "@/modules/profile/service";
@@ -66,11 +68,23 @@ export default function UserCertificatesPage({ params }: UserCertificatesPagePro
   }, [id]);
 
   if (profile === undefined) {
+    // ФАЗА SKELETON, задача SKEL.6.1 — той самий фікс, що на `/users/[id]`:
+    // порожній `<div />` замінено на скелетон "хлібна крихта + заголовок +
+    // сітка мініатюр", той самий каркас, що вже на `/certificates`.
     return (
       <div className="flex flex-1 flex-col">
         <Header />
         <main className="flex-1 py-8 pb-16 sm:py-10">
-          <div className="mx-auto max-w-5xl px-6" />
+          <div className="mx-auto max-w-5xl px-6">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="mt-4 h-8 w-56" />
+            <Skeleton className="mt-2 h-4 w-full max-w-md" />
+            <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <CertificateThumbnailSkeleton key={i} />
+              ))}
+            </div>
+          </div>
         </main>
       </div>
     );
