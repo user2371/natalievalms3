@@ -7,6 +7,8 @@ import { ChevronDownIcon, ChevronUpIcon, LogoutIcon } from "@/components/ui/icon
 export interface AccountButtonProps {
   name: string;
   avatarUrl?: string | null;
+  /** F.27.4: прокидається в `Avatar` — бейдж "M" на власному аватарі в Header. */
+  role?: string;
   open?: boolean;
   onToggle?: () => void;
   onLogout?: (e: React.MouseEvent) => void;
@@ -16,6 +18,7 @@ export interface AccountButtonProps {
 export function AccountButton({
   name,
   avatarUrl,
+  role,
   open = false,
   onToggle,
   onLogout,
@@ -32,7 +35,7 @@ export function AccountButton({
         className,
       )}
     >
-      <Avatar name={name} src={avatarUrl} size={32} />
+      <Avatar name={name} src={avatarUrl} size={32} role={role} />
       <span className="hidden text-sm font-medium text-ink sm:inline">{name}</span>
       {open ? (
         <ChevronUpIcon size={16} className="text-accent-dark" />

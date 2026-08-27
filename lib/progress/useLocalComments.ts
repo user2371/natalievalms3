@@ -26,6 +26,15 @@ export interface CommentWithReaction extends Comment {
   canDelete: boolean;
   /** Видаляється не як автор, а за адмінським правом (задача 0.17) — для іншого підпису/aria-label кнопки. */
   deletableAsAdmin: boolean;
+  /**
+   * F.27.5: роль автора коментаря — для бейджа "M" на аватарі (`Avatar`,
+   * F.27.3) у `CommentCard`. Опційне: демо-коментарі цього легасі-хука
+   * (Фаза 0, `lib/data/comments.ts`) не мають реальної ролі автора з
+   * бекенду, тому лишається `undefined` тут — бейдж показується лише для
+   * реальних (Prisma) коментарів через `RealCommentsBlock.tsx`, де роль
+   * справді відома (`comment.author.role`).
+   */
+  authorRole?: string;
 }
 
 /**

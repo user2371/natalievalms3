@@ -39,6 +39,27 @@ model User {
   certificates        Certificate[]
 }
 
+model PendingRegistration {
+  // F.26 (27.08.2026). Незавершена реєстрація — юзер ще НЕ підтвердив
+  // email кодом, тому реального запису User для нього ще немає.
+  // Навмисно ОКРЕМА модель, а не поле на User (User тут в принципі не
+  // існує) і навмисно НЕ stateless JWT (як passwordResetToken/
+  // emailChangeToken) — бо потрібно рахувати невдалі спроби вводу коду
+  // (attempts) і дозволяти "надіслати ще раз", а це вимагає стану, який
+  // переживає рестарт сервера/serverless-інстансу (на відміну від
+  // in-memory throttle-мапи в lib/auth/rateLimit.ts, тут втрата запису
+  // означала б, що юзер, який щойно ввів правильний код, "не існує").
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String?
+  codeHash     String
+  attempts     Int      @default(0)
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+}
+
 model Course {
   id               String   @id @default(uuid())
   slug             String   @unique

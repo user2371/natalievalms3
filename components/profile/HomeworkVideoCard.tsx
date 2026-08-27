@@ -11,6 +11,19 @@ export interface HomeworkVideoCardProps {
   authorName?: string;
   authorHandle?: string;
   authorAvatarUrl?: string | null;
+  /**
+   * F.27.6: роль автора ДЗ — для бейджа "M" на аватарі в рядку автора
+   * (`Avatar role`, F.27.3). Наразі жоден виклик цього компонента
+   * (`/profile`, `/homework`, `/users/[id]`) фактично не передає
+   * `authorName`/`authorAvatarUrl` (рядок автора там і так не рендериться
+   * — усі поточні виклики показують ВЛАСНІ здані відео користувача, без
+   * стороннього автора) — тож підвантаження реальної ролі з
+   * `service`/`repository` для цього пропу поки нізвідки взяти. Проп
+   * додано на рівні компонента (як і решта F.27.5–F.27.7), щоб бейдж
+   * зʼявився автоматично, щойно `authorName` десь реально почне
+   * передаватись.
+   */
+  authorRole?: string;
 }
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("uk-UA", {
@@ -34,6 +47,7 @@ export function HomeworkVideoCard({
   authorName,
   authorHandle,
   authorAvatarUrl,
+  authorRole,
 }: HomeworkVideoCardProps) {
   return (
     <div className="flex flex-col gap-2.5">
@@ -48,7 +62,7 @@ export function HomeworkVideoCard({
         </p>
         {authorName && (
           <div className="mt-2 flex items-center gap-1.5">
-            <Avatar src={authorAvatarUrl} name={authorName} size={20} />
+            <Avatar src={authorAvatarUrl} name={authorName} size={20} role={authorRole} />
             <span className="text-xs text-muted">{authorHandle ?? authorName}</span>
           </div>
         )}

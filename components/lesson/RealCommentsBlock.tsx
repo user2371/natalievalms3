@@ -86,6 +86,9 @@ function toCardComment(
     authorId: comment.author.id,
     authorName: authorDisplayName(comment.author),
     authorAvatarUrl: comment.author.avatarUrl,
+    // F.27.5: роль автора коментаря — для бейджа "M" на аватарі (`Avatar
+    // role`, F.27.3), прокидається в `CommentCard` разом з рештою полів.
+    authorRole: comment.author.role,
     createdAt:
       comment.createdAt instanceof Date
         ? comment.createdAt.toISOString()

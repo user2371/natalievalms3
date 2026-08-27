@@ -15,6 +15,7 @@ import { ProfileHeroSkeleton } from "@/components/skeletons/ProfileHeroSkeleton"
 import { CertificateThumbnailSkeleton } from "@/components/skeletons/CertificateThumbnailSkeleton";
 import { ListRowSkeleton } from "@/components/skeletons/ListRowSkeleton";
 import { ArrowRightIcon } from "@/components/ui/icons";
+import { FALLBACK_AVATAR_SRC } from "@/components/ui/Avatar";
 import { getPublicProfileAction } from "@/modules/profile/actions";
 import { getCertificatesForUserAction } from "@/modules/certificates";
 import type { PublicProfile } from "@/modules/profile/service";
@@ -23,8 +24,16 @@ import type { CertificateEntry } from "@/modules/certificates";
 export const dynamic = 'force-dynamic';
 
 const VISIBLE_CERTIFICATES = 5;
-/** Заглушка для великого "фото" в `ProfileHero`, коли в реального юзера немає `avatarUrl` (той самий підхід, що вже на `/users/[id]`, задача 6.6.18). */
-const FALLBACK_PROFILE_PHOTO = "/profileDemoPhoto.jpg";
+/**
+ * Заглушка для великого "фото" в `ProfileHero`, коли в реального юзера
+ * немає `avatarUrl` (той самий підхід, що вже на `/users/[id]`, задача
+ * 6.6.18). Оновлено (F.28): був `profileDemoPhoto.jpg` — реальне фото
+ * конкретної людини в холодних тонах і чорному одязі, що не пасувало до
+ * теплої кремово-теракотової кольорової гами додатку. Замінено на новий
+ * мінімалістичний SVG-силует у фірмових кольорах (`accent`/`accent-soft`/
+ * `rose-line`/`cream-soft` — ті самі, що в `app/globals.css`).
+ */
+const FALLBACK_PROFILE_PHOTO = FALLBACK_AVATAR_SRC;
 /** Заглушка для обкладинки курсу (той самий підхід, що на `/users/[id]`), коли в `Course.coverImage` нічого не задано в адмінці. */
 const FALLBACK_COURSE_COVER = "/heroImage.png";
 
@@ -110,6 +119,7 @@ export default function ProfilePage() {
   const userId = session?.user?.id;
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [certificates, setCertificates] = useState<CertificateEntry[]>([]);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   // Ім'я/аватар доступні одразу з `session.user` (той самий об'єкт, що вже
   // коректно показує їх у хедері) — решта (біо/дата/бали/рейтинг) лише тут,
@@ -117,16 +127,37 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
-    getPublicProfileAction(userId).then((result) => {
-      if (!cancelled && result.success) {
-        setProfile(result.profile);
-      }
-    });
-    getCertificatesForUserAction(userId).then((result) => {
-      if (!cancelled && result.success) {
-        setCertificates(result.certificates);
-      }
-    });
+    getPublicProfileAction(userId)
+      .then((result) => {
+        if (cancelled) return;
+        if (result.success) {
+          setProfile(result.profile);
+        } else {
+          // Раніше `success: false` мовчки ігнорувався: `profile`
+          // навічно лишався `null` → `profileLoading` (нижче) ніколи не
+          // ставав `false` → скелетон висів вічно БЕЗ жодного сліду
+          // причини (сервер відповідав 200, `getPublicProfileAction`
+          // сама ловить виняток і повертає `{ success: false, error }`,
+          // тому в терміналі теж було чисто). Тепер помилку видно в
+          // консолі браузера, і `profileError` нижче зупиняє скелетон.
+          console.error("getPublicProfileAction failed:", result.error);
+          setProfileError(result.error ?? "Не вдалося завантажити профіль");
+        }
+      })
+      .catch((err) => {
+        // Без .catch(): при падінні запиту (мережа тощо) `profile`
+        // навічно лишався `null` → скелетон висів вічно.
+        if (cancelled) return;
+        console.error("getPublicProfileAction rejected:", err);
+        setProfileError("Не вдалося завантажити профіль");
+      });
+    getCertificatesForUserAction(userId)
+      .then((result) => {
+        if (!cancelled && result.success) {
+          setCertificates(result.certificates);
+        }
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -151,7 +182,7 @@ export default function ProfilePage() {
   // `getCertificatesForUserAction` (окремий `useEffect` вище) ще не
   // повернули дані — `profile` лишається `null` до першого success.
   const sessionLoading = status === "loading";
-  const profileLoading = loggedIn && profile === null;
+  const profileLoading = loggedIn && profile === null && !profileError;
 
   if (sessionLoading || profileLoading) {
     return (
@@ -187,6 +218,13 @@ export default function ProfilePage() {
   return (
     <AccountLayout user={loggedIn ? { name: displayName, avatarUrl } : null}>
       <h1 className="font-serif text-3xl text-ink sm:text-4xl">Мій профіль</h1>
+
+      {profileError && (
+        <p className="mt-3 rounded-2xl border border-dashed border-rose-line/60 bg-cream-soft/60 px-4 py-3 text-sm text-muted">
+          Не вдалося завантажити частину даних профілю ({profileError}). Спробуйте
+          оновити сторінку.
+        </p>
+      )}
 
       <ProfileHero
         name={displayName}

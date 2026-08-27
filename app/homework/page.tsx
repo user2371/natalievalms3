@@ -62,9 +62,11 @@ export default function HomeworkPage() {
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
-    getPublicProfileAction(userId).then((result) => {
-      if (!cancelled && result.success) setProfile(result.profile);
-    });
+    getPublicProfileAction(userId)
+      .then((result) => {
+        if (!cancelled && result.success) setProfile(result.profile);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };

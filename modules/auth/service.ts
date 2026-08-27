@@ -1,4 +1,9 @@
-import { RegisterInput, RegisterSchema, ResetPasswordInput } from "./schema";
+import {
+  RegisterInput,
+  RegisterSchema,
+  ResetPasswordInput,
+  VerifyRegistrationInput,
+} from "./schema";
 import * as repository from "./repository";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import {
@@ -6,8 +11,28 @@ import {
   verifyPasswordResetToken,
 } from "@/lib/auth/passwordResetToken";
 import { sendPasswordResetEmail } from "@/lib/email/passwordResetMail";
+import {
+  generateVerificationCode,
+  hashVerificationCode,
+  verifyVerificationCode,
+  computeCodeExpiry,
+  MAX_CODE_ATTEMPTS,
+} from "@/lib/auth/verificationCode";
+import { sendRegistrationVerificationEmail } from "@/lib/email/registrationVerificationMail";
+import { signPostRegistrationToken } from "@/lib/auth/postRegistrationToken";
 
-export async function registerUserService(input: RegisterInput) {
+/**
+ * Фаза FIXES, задача F.26 (підтвердження email кодом перед
+ * реєстрацією). Крок 1: замінює колишній `registerUserService`, який
+ * одразу писав реального `User`. Тепер — та сама перевірка "юзер із
+ * таким email вже існує" на старті, але замість `repository.createUser`
+ * пишеться/оновлюється `PendingRegistration` (F.26.5,
+ * `upsertPendingRegistration` — перезаписує попередній незавершений
+ * запит з тим самим email, якщо він був) і надсилається лист з кодом.
+ * Реальний `User` тут БІЛЬШЕ НЕ створюється — це робить лише
+ * `verifyRegistrationCodeService` нижче, після підтвердження коду.
+ */
+export async function requestRegistrationService(input: RegisterInput) {
   const parsed = RegisterSchema.safeParse(input);
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message || "Некоректні дані реєстрації");
@@ -19,15 +44,97 @@ export async function registerUserService(input: RegisterInput) {
   }
 
   const hashedPassword = await hashPassword(parsed.data.password);
+  const code = generateVerificationCode();
+  const codeHash = await hashVerificationCode(code);
 
-  const user = await repository.createUser({
+  await repository.upsertPendingRegistration({
     email: parsed.data.email,
     passwordHash: hashedPassword,
     firstName: parsed.data.firstName,
     lastName: parsed.data.lastName,
+    codeHash,
+    expiresAt: computeCodeExpiry(),
   });
 
-  return user;
+  await sendRegistrationVerificationEmail(parsed.data.email, code);
+}
+
+/**
+ * Крок 2: викликається після вводу коду з листа. Перевіряє
+ * `PendingRegistration` за email — відсутність запису чи протермінований
+ * `expiresAt` дають зрозумілу помилку ("запросіть новий код"), розбіжний
+ * код — збільшує `attempts` (F.26.5) і повертає помилку з кількістю
+ * спроб, що лишились; після `MAX_CODE_ATTEMPTS` код вважається
+ * "спаленим" — потрібен новий через `resendRegistrationCodeService`.
+ * При збігу — створює реального `User` (той самий `repository.createUser`,
+ * що й раніше в `registerUserService`, з полями з `PendingRegistration`),
+ * видаляє сам `PendingRegistration` і повертає короткоживучий токен
+ * авто-логіну (`signPostRegistrationToken`, `lib/auth/
+ * postRegistrationToken.ts`) — саме він, а не пароль, іде у фінальний
+ * `signIn` в `actions.ts` (рішення по F.26.9.1: пароль ніколи не
+ * прокидається назад від клієнта на цьому кроці).
+ */
+export async function verifyRegistrationCodeService(
+  input: VerifyRegistrationInput,
+): Promise<{ signInToken: string }> {
+  const pending = await repository.findPendingRegistrationByEmail(input.email);
+  if (!pending) {
+    throw new Error(
+      "Запит на реєстрацію не знайдено або вже завершено. Зареєструйтесь ще раз.",
+    );
+  }
+
+  if (pending.expiresAt.getTime() < Date.now()) {
+    throw new Error("Код застарів. Натисніть «Надіслати код ще раз».");
+  }
+
+  if (pending.attempts >= MAX_CODE_ATTEMPTS) {
+    throw new Error(
+      "Забагато невдалих спроб. Натисніть «Надіслати код ще раз», щоб отримати новий код.",
+    );
+  }
+
+  const isValid = await verifyVerificationCode(input.code, pending.codeHash);
+  if (!isValid) {
+    await repository.incrementPendingRegistrationAttempts(input.email);
+    const attemptsLeft = MAX_CODE_ATTEMPTS - (pending.attempts + 1);
+    throw new Error(
+      attemptsLeft > 0
+        ? `Невірний код. Спроб залишилось: ${attemptsLeft}.`
+        : "Невірний код. Спроби вичерпано — натисніть «Надіслати код ще раз».",
+    );
+  }
+
+  const user = await repository.createUser({
+    email: pending.email,
+    passwordHash: pending.passwordHash,
+    firstName: pending.firstName,
+    lastName: pending.lastName || undefined,
+  });
+
+  await repository.deletePendingRegistration(pending.email);
+
+  const signInToken = await signPostRegistrationToken({ userId: user.id });
+  return { signInToken };
+}
+
+/**
+ * Кнопка "Надіслати код ще раз". Throttle (окремий кулдаун,
+ * `lib/auth/rateLimit.ts::isResendCodeRateLimited`) перевіряється в
+ * `actions.ts`, до виклику цього сервісу. Якщо `PendingRegistration`
+ * з таким email не існує (протух і вже видалений після успішної
+ * верифікації, чи взагалі не було) — тиха відмова без деталей, той
+ * самий принцип анти-enumeration, що вже в `requestPasswordResetService`.
+ */
+export async function resendRegistrationCodeService(email: string): Promise<void> {
+  const pending = await repository.findPendingRegistrationByEmail(email);
+  if (!pending) return;
+
+  const code = generateVerificationCode();
+  const codeHash = await hashVerificationCode(code);
+  await repository.refreshPendingRegistrationCode(email, codeHash, computeCodeExpiry());
+
+  await sendRegistrationVerificationEmail(pending.email, code);
 }
 
 export async function validateUserCredentials(email: string, password: string) {

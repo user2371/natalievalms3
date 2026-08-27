@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { Header } from "@/components/layout/Header";
+import { Avatar } from "@/components/ui/Avatar";
 import { LeaderboardGuestCta } from "@/components/leaderboard/LeaderboardGuestCta";
 import {
   TrophyIcon,
@@ -54,36 +55,6 @@ const PROMO_ITEMS = [
   },
 ];
 
-function LeaderboardAvatar({ entry, size }: { entry: LeaderboardEntry; size: number }) {
-  if (entry.avatarUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={entry.avatarUrl}
-        alt=""
-        className="h-full w-full rounded-full object-cover"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
-
-  const initials = entry.name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("");
-
-  return (
-    <span
-      className="flex shrink-0 items-center justify-center rounded-full bg-accent-soft font-medium text-accent-dark"
-      style={{ width: size, height: size, fontSize: size * 0.38 }}
-    >
-      {initials || "?"}
-    </span>
-  );
-}
-
 function LeaderboardRow({ entry, isOwn }: { entry: LeaderboardEntry; isOwn: boolean }) {
   const rowClassName = cn(
     "flex items-center gap-4 rounded-xl px-3 py-3 transition-colors",
@@ -94,7 +65,7 @@ function LeaderboardRow({ entry, isOwn }: { entry: LeaderboardEntry; isOwn: bool
     <Link href={`/users/${entry.userId}`} className={rowClassName}>
       <span className="w-10 shrink-0 text-sm text-muted">{entry.rank}</span>
       <span className="flex min-w-0 flex-1 items-center gap-3">
-        <LeaderboardAvatar entry={entry} size={40} />
+        <Avatar src={entry.avatarUrl} name={entry.name} size={40} role={entry.role} />
         <span className="truncate text-sm font-medium text-ink">{entry.name}</span>
       </span>
       <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-ink">
@@ -128,6 +99,11 @@ function LeaderboardRow({ entry, isOwn }: { entry: LeaderboardEntry; isOwn: bool
  * Підсвітка власного рядка (`isOwn`) і банер "Ваше місце: N" — за
  * `currentUser` із сесії (`auth()`), не по клієнтському тумблеру, як було
  * в демо-версії.
+ *
+ * F.27.7: локальна `LeaderboardAvatar` (власна копія `<img>`/ініціалів)
+ * прибрана — сторінка тепер використовує спільний `components/ui/Avatar.tsx`
+ * (варіант 2 з плану, рекомендований), тож бейдж "M" (F.27.3) підхоплюється
+ * автоматично й друга копія логіки аватарки більше не дублюється.
  */
 export default async function LeaderboardPage() {
   const session = await auth();
@@ -196,7 +172,7 @@ export default async function LeaderboardPage() {
                     >
                       {entry.rank}
                     </span>
-                    <LeaderboardAvatar entry={entry} size={80} />
+                    <Avatar src={entry.avatarUrl} name={entry.name} size={80} role={entry.role} />
                     <span className="font-medium text-ink">{entry.name}</span>
                     <span className="flex items-center gap-1 font-serif text-xl text-ink">
                       {entry.totalPoints.toLocaleString("uk-UA")}

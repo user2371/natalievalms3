@@ -1,24 +1,40 @@
 import Link from "next/link";
-import { GearIcon, GraduationCapIcon, UserIcon } from "@/components/ui/icons";
+import { GearIcon, GraduationCapIcon, ShieldIcon, UserIcon } from "@/components/ui/icons";
 
 export interface AccountDropdownProps {
   onNavigate?: () => void;
+  /** F.27.1: коли `true` — після "Моє навчання" зʼявляється пункт "Панель адміністратора". */
+  isAdmin?: boolean;
 }
 
-const MENU_ITEMS = [
+const BASE_MENU_ITEMS = [
   { label: "Мій профіль", href: "/profile", icon: UserIcon },
   { label: "Моє навчання", href: "/my-learning", icon: GraduationCapIcon },
 ];
+
+/** F.27.1: той самий `ShieldIcon`, що вже позначає адмін-модерацію в `CommentCard.tsx`/`AdminUsersTable.tsx`. */
+const ADMIN_MENU_ITEM = {
+  label: "Панель адміністратора",
+  href: "/admin",
+  icon: ShieldIcon,
+};
 
 const MENU_ITEMS_SECONDARY = [
   { label: "Налаштування", href: "/settings", icon: GearIcon },
 ];
 
-export function AccountDropdown({ onNavigate }: AccountDropdownProps) {
+/**
+ * F.27.1: пункт меню акаунту для адміна. `MENU_ITEMS` тепер будується
+ * динамічно (не статичний масив) — залежить від `isAdmin`, переданого з
+ * `Header.tsx` (F.27.2), яке саме читає `session.user.role`.
+ */
+export function AccountDropdown({ onNavigate, isAdmin = false }: AccountDropdownProps) {
+  const menuItems = isAdmin ? [...BASE_MENU_ITEMS, ADMIN_MENU_ITEM] : BASE_MENU_ITEMS;
+
   return (
     <div role="menu" aria-label="Меню акаунту">
       <div className="flex flex-col gap-0.5">
-        {MENU_ITEMS.map(({ label, href, icon: Icon }) => (
+        {menuItems.map(({ label, href, icon: Icon }) => (
           <Link
             key={href}
             href={href}

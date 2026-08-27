@@ -4272,6 +4272,144 @@ schema/repository/service/actions, спільна функція групува�
 
 **Файли:** `TASKS_DETAILED.md`, `IMPLEMENTATION_STATUS.md`.
 
+## F.26 — Register, підтвердження email кодом перед створенням юзера (27.08.2026, РЕАЛІЗОВАНО)
+
+Прохання користувача: зараз `registerUserAction` створював реального
+`User` в БД одразу, без підтвердження email — цим можна було масово
+плодити фейкові акаунти. Спочатку задокументовано план (F.26.1–F.26.9),
+далі за прямим проханням користувача ("зроби як кажуть бест практіс і
+приступай до написання коду") реалізовано повністю.
+
+**Реалізація:** нова Prisma-модель `PendingRegistration`
+(`email`/`passwordHash`/`codeHash`/`attempts`/`expiresAt`, міграція
+`20260827100000_pending_registration`) — незавершена реєстрація, поки
+код не підтверджено. `lib/auth/verificationCode.ts` — генерація
+(`crypto.randomInt`) і bcrypt-хешування 6-значного коду.
+`lib/email/registrationVerificationMail.ts` — Resend-лист із кодом
+текстом (не посиланням). `modules/auth` переписано на два кроки:
+`requestRegistrationService` (крок 1 — пише `PendingRegistration`,
+шле код, User НЕ створюється) і `verifyRegistrationCodeService`
+(крок 2 — звіряє код, рахує невдалі спроби, лише при збігу створює
+реального `User`) + `resendRegistrationCodeService`. Throttle і на сам
+крок 1 (email-бомбінг форми реєстрації), і окремо на кнопку "надіслати
+ще раз" (60-секундний кулдаун), і ліміт спроб коду (5) —
+`lib/auth/rateLimit.ts`.
+
+**Найважливіше рішення (F.26.9.1, пароль між кроками):** замість
+того, щоб тримати пароль у клієнтському React-стані модалки чи просити
+ввести його повторно (обидва варіанти з початкового плану), обрано
+безпечніший бест-практіс: сервер сам видає короткоживучий (2 хв)
+підписаний JWT одразу після підтвердження коду й створення `User`
+(`lib/auth/postRegistrationToken.ts`, той самий `jose`-підхід, що вже в
+`passwordResetToken.ts`). `CredentialsProvider.authorize()` (`auth.ts`)
+отримав нову гілку — логін за цим токеном без пароля, поруч зі
+звичайним email+пароль-флоу. Пароль після кроку 1 більше НІКОЛИ не
+покидає сервер.
+
+**UI:** новий екран `components/auth/VerifyEmailScreen.tsx` у модалці
+автентифікації (`AuthModal.tsx`, новий `AuthScreen = "verify-email"`,
+проміжний `email` тримається локальним `useState` самого `AuthModal`,
+що вже й так монтується один раз у корені дерева) — код, кнопка
+"Надіслати ще раз" з таймером кулдауну, "Змінити email". `RegisterScreen`
+після кроку 1 більше не логінить одразу, а перемикає на цей екран;
+`updateSession()`/one-time мерж гостьового прогресу (задача 7.6)
+переїхали туди ж, бо саме там тепер відбувається реальний вхід.
+
+⚠️ Не могло бути перевірено реальним `npm run dev`/`prisma generate` в
+цій пісочниці (немає мережі до `binaries.prisma.sh`, той самий
+стандартний застереження, що й для попередніх фаз) — лише вичитка коду
+й типів вручну.
+
+**Оновлення 27.08.2026 (F.26.10, dev-заглушка):** після реальної
+перевірки з'ясувалось, що Resend free-план без верифікованого домену
+відхиляє листи на будь-яку адресу, крім тієї, якою зареєстровано сам
+Resend-акаунт — форма реєстрації падала з "Не вдалося надіслати лист з
+кодом" для всіх інших адрес. Доки немає купленого/верифікованого
+домену, `sendRegistrationVerificationEmail` при
+`NODE_ENV !== "production"` більше не кидає помилку при збої Resend —
+код друкується в консоль сервера, і реєстрацію тестових юзерів можна
+продовжувати на будь-яку адресу. У проді поведінка не змінена. Сам
+функціонал підтвердження (модель, лічильник спроб, сервіси) не
+вимикався — заглушка лише на рівні відправки листа, і стане непотрібною
+сама собою, щойно з'явиться верифікований домен.
+
+**Файли:** `prisma/schema.prisma` + нова міграція,
+`lib/auth/verificationCode.ts`, `lib/auth/postRegistrationToken.ts`,
+`lib/email/registrationVerificationMail.ts`, `lib/auth/rateLimit.ts`,
+`modules/auth/*`, `auth.ts`, `components/auth/AuthModal.tsx`,
+`components/auth/RegisterScreen.tsx`,
+`components/auth/VerifyEmailScreen.tsx`, `TASKS_DETAILED.md`,
+`IMPLEMENTATION_STATUS.md`.
+
+## F.27 — "Панель адміністратора" в меню + бейдж "M" на аватарках адміна (27.08.2026, F.27.1–F.27.7 РЕАЛІЗОВАНО)
+
+Прохання користувача: у дропдауні за стрілочкою біля імені для адміна
+після "Профіль"/"Навчання" мала б з'являтись ще опція "Панель
+адміністратора"; сам адмін мав би автоматично отримувати маленький
+SVG-значок "M" (moderator) всюди, де показується його аватарка.
+Спершу задокументовано детальний план (`TASKS_DETAILED.md`, розділ
+"F.27") з розвідкою коду й відкритими питаннями (F.27.9.1–F.27.9.4),
+далі реалізовано F.27.1–F.27.7 у рекомендованому в плані порядку.
+
+**Частина A (пункт меню):** `components/layout/AccountDropdown.tsx`
+отримав пропс `isAdmin?: boolean` — новий пункт "Панель
+адміністратора" (`ShieldIcon`, `/admin`, той самий значок, що вже
+позначає адмін-модерацію в `CommentCard.tsx`/`AdminUsersTable.tsx`)
+рендериться після "Мій профіль"/"Моє навчання", до роздільника й
+"Налаштування", лише коли `isAdmin`. `components/layout/Header.tsx`
+дістає роль з `session.user.role` (той самий каст `(session?.user as
+{ role?: string })`, що вже в `AccountLayout.tsx`/`RealCommentsBlock.tsx`)
+і прокидає `isAdmin`; `HeaderUser` отримав опційне поле `role?: string`.
+
+**Частина B (бейдж "M"):** `components/ui/Avatar.tsx` — новий
+опційний пропс `role?: string` (рядок, а не Prisma-enum, щоб не
+тягнути залежність у клієнтський UI-компонент); коли `"ADMIN"` —
+поверх аватарки рендериться маленький бейдж-кружечок "M"
+(`accent`/білий ring, розмір `size * 0.32`, `title="Модератор"` —
+рішення з F.27.9.1). Це ЄДИНЕ місце, де малюється сам бейдж — усі
+інші компоненти лише прокидають `role`:
+- `components/layout/AccountButton.tsx` — власний аватар у Header
+  (`session.user.role`).
+- `components/lesson/CommentCard.tsx` — аватар автора коментаря;
+  `CommentWithReaction.authorRole?` (нове поле), заповнюється в
+  `RealCommentsBlock.tsx::toCardComment` з `comment.author.role`
+  (реальні Prisma-коментарі). У легасі `lib/progress/useLocalComments.ts`
+  (демо-коментарі Фази 0) поле лишається `undefined` — немає реальної
+  ролі автора в цих даних.
+- `components/profile/HomeworkVideoCard.tsx` — новий пропс
+  `authorRole?: string`, прокинутий у `Avatar`, але НЕ підключений до
+  жодного реального виклику: перевірено всі 4 місця використання
+  (`/profile`, `/homework`, `/users/[id]`, `/my-learning`) — жодне
+  фактично не передає `authorName` (рядок автора там ніде не
+  рендериться, усі показують ВЛАСНІ здані відео користувача) — тож
+  реальної ролі для прокидки поки нізвідки взяти.
+- `app/leaderboard/page.tsx` — `LeaderboardEntry`
+  (`modules/leaderboard/service.ts`) отримало поле `role: string` (з
+  `prisma.user.role`, додано в `select`). Локальна `LeaderboardAvatar`
+  (власна копія `<img>`/ініціалів) прибрана — сторінка переписана на
+  спільний `Avatar` (варіант 2 з плану, рекомендований) — бейдж
+  підхоплюється автоматично, дублювання логіки аватарки прибрано.
+
+**НЕ реалізовано (свідомо):** F.27.8 (`ProfileHero.tsx`, велике фото
+на `/profile`/`/users/[id]`) — чекає відповіді власниці на відкрите
+питання F.27.9.2 (чи потрібен бейдж і там, чи це виглядатиме
+непропорційно). F.27.9.4 (бейдж у самій адмінці) також лишається
+відкритим — за межі F.27.1–F.27.7 не виходили. Фото майстрині й
+статичні відгуки на лендінгу (`MasterSection`/`TestimonialsSection`)
+свідомо поза обсягом — не прив'язані до реальних `User`/ролей.
+
+⚠️ Не могло бути перевірено реальним `npm run dev`/`tsc` в цій
+пісочниці (немає `node_modules`) — лише вичитка коду й типів вручну.
+
+**Файли:** `components/layout/AccountDropdown.tsx`,
+`components/layout/Header.tsx`, `components/layout/AccountButton.tsx`,
+`components/ui/Avatar.tsx`, `lib/progress/useLocalComments.ts`,
+`components/lesson/RealCommentsBlock.tsx`,
+`components/lesson/CommentCard.tsx`,
+`components/profile/HomeworkVideoCard.tsx`,
+`modules/leaderboard/service.ts`, `app/leaderboard/page.tsx`,
+`TASKS_DETAILED.md`, `IMPLEMENTATION_STATUS.md`.
+
 ## ФАЗА SKELETON — Скелетони замість спінера на час очікування відмальовки (27.08.2026, ЗАВЕРШЕНО)
 
 Прохання користувача: створити скелетони для всіх сторінок, де є
@@ -4323,3 +4461,34 @@ schema/repository/service/actions, спільна функція групува�
 **Файли:** `components/ui/Skeleton.tsx`, `components/skeletons/*.tsx`
 (8 нових файлів), 7 нових `loading.tsx`, 7 змінених `page.tsx` сторінок
 кабінету, `TASKS_DETAILED.md`, `IMPLEMENTATION_STATUS.md`.
+
+## F.28 — Нова стандартна аватарка для юзерів без фото (27.08.2026, РЕАЛІЗОВАНО)
+
+Прохання користувача: старий фолбек-фото для юзерів без своєї аватарки
+не пасував по кольоровій гамі — потрібна нова, мінімалістична стандартна
+аватарка.
+
+**Що було не так:** `public/profileDemoPhoto.jpg` — реальне студійне
+фото конкретної жінки в холодних сіро-бежевих тонах і чорному одязі,
+використовувалося як `FALLBACK_PROFILE_PHOTO` (велике фото `ProfileHero`
+на `/profile`/`/users/[id]`, кругле прев'ю на `/settings`) — явно не
+згідно з теплою кремово-теракотовою гамою решти додатку
+(`app/globals.css`: `cream`/`accent`/`rose-line`).
+
+**Рішення:** новий `public/defaultProfilePhoto.svg` — плаский
+мінімалістичний силует (голова + плечі) у точних фірмових кольорах:
+`cream-soft` фон, `accent-soft` декоративне коло, `rose-line` тонке
+зовнішнє кільце, сам силует — `accent`/`accent-dark`. Квадратна
+композиція 600×600, центрована — коректно кадрується і колом
+(налаштування), і прямокутником 4:5 (`ProfileHero`); перевірено рендером
+в обох кадруваннях (`cairosvg` у пісочниці). `FALLBACK_PROFILE_PHOTO`
+перемкнено на новий файл у трьох місцях (`/profile`, `/users/[id]`,
+`/settings`). Малий круглий `Avatar.tsx` (Header/коментарі/ДЗ/рейтинг)
+не чіпали — там уже інша, коректна за кольором заглушка (ініціали).
+Старий `.jpg` не видаляли — на нього все ще посилається легасі
+демо-дані Фази 0 (`lib/data/profile.ts`), не пов'язані з реальним
+фолбеком.
+
+**Файли:** `public/defaultProfilePhoto.svg` (новий),
+`app/profile/page.tsx`, `app/users/[id]/page.tsx`,
+`app/settings/page.tsx`, `TASKS_DETAILED.md`, `IMPLEMENTATION_STATUS.md`.

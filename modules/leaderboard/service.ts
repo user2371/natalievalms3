@@ -20,6 +20,8 @@ export interface LeaderboardEntry {
   name: string;
   avatarUrl: string | null;
   totalPoints: number;
+  /** F.27.7: роль користувача — для бейджа "M" на аватарі в таблиці рейтингу (`Avatar role`, F.27.3). */
+  role: string;
 }
 
 function displayName(user: {
@@ -53,6 +55,7 @@ async function buildFullRanking(): Promise<LeaderboardEntry[]> {
     nickname: string | null;
     avatarUrl: string | null;
     createdAt: Date;
+    role: string;
   }[] = await prisma.user.findMany({
     where: { id: { in: userIds } },
     select: {
@@ -62,6 +65,7 @@ async function buildFullRanking(): Promise<LeaderboardEntry[]> {
       nickname: true,
       avatarUrl: true,
       createdAt: true,
+      role: true,
     },
   });
   const usersById = new Map(users.map((user) => [user.id, user]));
@@ -76,6 +80,7 @@ async function buildFullRanking(): Promise<LeaderboardEntry[]> {
         name: displayName(user),
         avatarUrl: user.avatarUrl,
         createdAt: user.createdAt,
+        role: user.role,
       };
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
@@ -92,6 +97,7 @@ async function buildFullRanking(): Promise<LeaderboardEntry[]> {
     name: entry.name,
     avatarUrl: entry.avatarUrl,
     totalPoints: entry.totalPoints,
+    role: entry.role,
   }));
 }
 

@@ -47,12 +47,16 @@ export default function CertificatesPage() {
     if (!userId) return;
     let cancelled = false;
 
-    getPublicProfileAction(userId).then((result) => {
-      if (!cancelled && result.success) setProfile(result.profile);
-    });
-    getCertificatesForUserAction(userId).then((result) => {
-      if (!cancelled && result.success) setCertificates(result.certificates);
-    });
+    getPublicProfileAction(userId)
+      .then((result) => {
+        if (!cancelled && result.success) setProfile(result.profile);
+      })
+      .catch(() => {});
+    getCertificatesForUserAction(userId)
+      .then((result) => {
+        if (!cancelled && result.success) setCertificates(result.certificates);
+      })
+      .catch(() => {});
 
     return () => {
       cancelled = true;

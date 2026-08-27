@@ -95,6 +95,7 @@ export function CommentCard({
           src={comment.authorAvatarUrl}
           name={comment.authorName}
           size={isReply ? 30 : 38}
+          role={comment.authorRole}
         />
       </Link>
 

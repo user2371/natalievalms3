@@ -12,6 +12,8 @@ import { useSession, signOut } from "next-auth/react";
 export interface HeaderUser {
   name: string;
   avatarUrl?: string | null;
+  /** F.27.2: опційна роль — щоб виклики з явним `user`-пропом теж могли передати роль. */
+  role?: string;
 }
 
 export interface HeaderProps {
@@ -66,8 +68,14 @@ export function Header({ user: propUser, onLogout: propOnLogout }: HeaderProps) 
             name: session.user.name || "Користувач",
             avatarUrl:
               (session.user as { avatarUrl?: string }).avatarUrl || session.user.image,
+            role: (session.user as { role?: string }).role,
           }
         : null;
+
+  // F.27.2: той самий каст `session?.user as { role?: string }`, що вже в
+  // `AccountLayout.tsx`/`RealCommentsBlock.tsx` — для пункту меню "Панель
+  // адміністратора" (F.27.1) і бейджа "M" на власному аватарі (F.27.4).
+  const isAdmin = user?.role === "ADMIN";
 
   // Fixes (02.08.2026): БУВ `logoutUserAction()` (server action, `modules/auth`)
   // — очищує сесію на сервері, але клієнтський `useSession()` (звідки `user`
@@ -110,13 +118,17 @@ export function Header({ user: propUser, onLogout: propOnLogout }: HeaderProps) 
                   <AccountButton
                     name={user.name}
                     avatarUrl={user.avatarUrl}
+                    role={user.role}
                     open={dropdownOpen}
                     onToggle={() => setDropdownOpen((v) => !v)}
                     onLogout={onLogout ? () => onLogout() : undefined}
                   />
                 </DropdownTrigger>
                 <DropdownContent align="right">
-                  <AccountDropdown onNavigate={() => setDropdownOpen(false)} />
+                  <AccountDropdown
+                    onNavigate={() => setDropdownOpen(false)}
+                    isAdmin={isAdmin}
+                  />
                 </DropdownContent>
               </Dropdown>
             </>

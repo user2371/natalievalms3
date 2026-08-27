@@ -82,3 +82,73 @@ export function recordPasswordResetRequest(key: string): void {
   }
   entry.count += 1;
 }
+
+/**
+ * Фаза FIXES, задача F.26 (підтвердження email кодом перед
+ * реєстрацією). Окремий, короткий кулдаун саме для "Надіслати код ще
+ * раз" — на відміну від `passwordResetRequests` вище (15 хв/3 спроби,
+ * захист від спаму формою "Забув пароль"), тут людина цілком очікувано
+ * може захотіти повторний лист швидко (код не дійшов/попав у спам), але
+ * без обмеження це стало б інструментом email-бомбінгу довільної
+ * адреси через `resendRegistrationCodeAction`. 60 секунд між запитами —
+ * достатньо, щоб зупинити спам, і не заважає реальному користувачу.
+ */
+const resendCodeRequests = new Map<string, AttemptEntry>();
+const RESEND_CODE_COOLDOWN_MS = 60 * 1000; // 60 секунд
+
+/** true, якщо для цього email ще не минув кулдаун "надіслати ще раз". */
+export function isResendCodeRateLimited(key: string): boolean {
+  const entry = resendCodeRequests.get(key);
+  if (!entry) return false;
+  return Date.now() - entry.firstAttemptAt < RESEND_CODE_COOLDOWN_MS;
+}
+
+/** Викликається після кожного (успішного) запиту "надіслати код ще раз". */
+export function recordResendCodeRequest(key: string): void {
+  resendCodeRequests.set(key, { count: 1, firstAttemptAt: Date.now() });
+}
+
+/** Скільки секунд лишилось до можливості повторного запиту (для UI-таймера). */
+export function getResendCodeCooldownRemainingSeconds(key: string): number {
+  const entry = resendCodeRequests.get(key);
+  if (!entry) return 0;
+  const remainingMs = RESEND_CODE_COOLDOWN_MS - (Date.now() - entry.firstAttemptAt);
+  return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+}
+
+/**
+ * Throttle на сам крок 1 реєстрації (`requestRegistrationAction`) за
+ * email — щоб не можна було нескінченно спамити ту саму адресу
+ * листами через повторні `POST` на форму реєстрації (окремий від
+ * кулдауну "надіслати ще раз" вище, бо йде в дію ще ДО того, як
+ * з'явився сам `PendingRegistration`/кнопка резенду). Те саме вікно/
+ * ліміт, що вже для `passwordResetRequests`.
+ */
+const registrationRequests = new Map<string, AttemptEntry>();
+const REGISTRATION_REQUEST_WINDOW_MS = 15 * 60 * 1000; // 15 хвилин
+const REGISTRATION_REQUEST_MAX_ATTEMPTS = 3;
+
+function isRegistrationRequestExpired(entry: AttemptEntry): boolean {
+  return Date.now() - entry.firstAttemptAt > REGISTRATION_REQUEST_WINDOW_MS;
+}
+
+/** true, якщо для цього email вичерпано ліміт запитів реєстрації (крок 1). */
+export function isRegistrationRateLimited(key: string): boolean {
+  const entry = registrationRequests.get(key);
+  if (!entry) return false;
+  if (isRegistrationRequestExpired(entry)) {
+    registrationRequests.delete(key);
+    return false;
+  }
+  return entry.count >= REGISTRATION_REQUEST_MAX_ATTEMPTS;
+}
+
+/** Викликається після кожного запиту реєстрації (крок 1), незалежно від успіху. */
+export function recordRegistrationRequest(key: string): void {
+  const entry = registrationRequests.get(key);
+  if (!entry || isRegistrationRequestExpired(entry)) {
+    registrationRequests.set(key, { count: 1, firstAttemptAt: Date.now() });
+    return;
+  }
+  entry.count += 1;
+}

@@ -50,8 +50,13 @@ async function main() {
       firstName: "Анастасія",
       lastName: "Наталієва",
       nickname: "@natalieva_master",
-      avatarUrl:
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400",
+      // `avatarUrl: null` (F.28) — за прямим проханням користувача:
+      // раніше тут стояло hardcoded Unsplash-фото "засновниці", через яке
+      // на /profile та /my-learning показувалось воно замість нового
+      // мінімалістичного дефолту з `components/ui/Avatar.tsx`. Тепер admin
+      // (як і testUser нижче, і фейкові юзери лідерборду вище) без
+      // власного фото — фолбек підставляється в UI.
+      avatarUrl: null,
       about:
         "Засновниця онлайн-академії манікюру NATALIEVA. 5+ років досвіду, 1000+ випускниць.",
       role: Role.ADMIN,
@@ -66,8 +71,8 @@ async function main() {
       firstName: "Олена",
       lastName: "Павлюк",
       nickname: "@elena_nails",
-      avatarUrl:
-        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=400",
+      // `avatarUrl: null` — той самий фікс, що й для adminUser вище.
+      avatarUrl: null,
       about: 'Початківниця у світі манікюру. Проходжу курс "Гель-лак для новачків".',
       role: Role.USER,
       homeworkVisible: true,
@@ -117,7 +122,13 @@ async function main() {
         firstName: u.firstName,
         lastName: u.lastName,
         nickname: u.nickname,
-        avatarUrl: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400`,
+        // `avatarUrl: null` — без власного фото, тому в UI (`components/ui/Avatar.tsx`)
+        // для них рендериться дефолтна аватарка `/defaultProfilePhoto.svg`.
+        // Раніше тут стояло одне й те саме stock-фото з Unsplash для всіх
+        // 10 фейкових юзерів лідерборду — саме тому на /leaderboard і в
+        // коментарях замість нового мінімалістичного плейсхолдера було
+        // видно чуже фото.
+        avatarUrl: null,
         role: Role.USER,
       },
     });

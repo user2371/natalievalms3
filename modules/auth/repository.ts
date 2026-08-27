@@ -54,3 +54,77 @@ export async function createUser(data: CreateUserData) {
     },
   });
 }
+
+/**
+ * Фаза FIXES, задача F.26 (підтвердження email кодом перед
+ * реєстрацією). CRUD для `PendingRegistration` — незавершена
+ * реєстрація, поки код не підтверджено (реального `User` ще нема).
+ */
+export interface PendingRegistrationData {
+  email: string;
+  passwordHash: string;
+  firstName: string;
+  lastName?: string;
+  codeHash: string;
+  expiresAt: Date;
+}
+
+export async function findPendingRegistrationByEmail(email: string) {
+  return prisma.pendingRegistration.findUnique({
+    where: { email: email.toLowerCase() },
+  });
+}
+
+/**
+ * Створює новий запис або повністю перезаписує попередній незавершений
+ * запит з тим самим email (типовий кейс: лист не дійшов, чи людина
+ * передумала й реєструється повторно) — новий пароль/код/`expiresAt`,
+ * лічильник `attempts` завжди скидається на 0.
+ */
+export async function upsertPendingRegistration(data: PendingRegistrationData) {
+  const email = data.email.toLowerCase();
+  return prisma.pendingRegistration.upsert({
+    where: { email },
+    create: {
+      email,
+      passwordHash: data.passwordHash,
+      firstName: data.firstName,
+      lastName: data.lastName || null,
+      codeHash: data.codeHash,
+      expiresAt: data.expiresAt,
+    },
+    update: {
+      passwordHash: data.passwordHash,
+      firstName: data.firstName,
+      lastName: data.lastName || null,
+      codeHash: data.codeHash,
+      expiresAt: data.expiresAt,
+      attempts: 0,
+    },
+  });
+}
+
+/** Оновлює лише код/термін дії й скидає лічильник спроб — для "Надіслати ще раз". */
+export async function refreshPendingRegistrationCode(
+  email: string,
+  codeHash: string,
+  expiresAt: Date,
+) {
+  return prisma.pendingRegistration.update({
+    where: { email: email.toLowerCase() },
+    data: { codeHash, expiresAt, attempts: 0 },
+  });
+}
+
+export async function incrementPendingRegistrationAttempts(email: string) {
+  return prisma.pendingRegistration.update({
+    where: { email: email.toLowerCase() },
+    data: { attempts: { increment: 1 } },
+  });
+}
+
+export async function deletePendingRegistration(email: string) {
+  return prisma.pendingRegistration.delete({
+    where: { email: email.toLowerCase() },
+  });
+}

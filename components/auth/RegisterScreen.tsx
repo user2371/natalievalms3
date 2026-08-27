@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useSession } from "next-auth/react";
 import { Input } from "@/components/ui/Input";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Button } from "@/components/ui/Button";
@@ -9,12 +8,18 @@ import { Divider } from "@/components/ui/Divider";
 import { MailIcon, LockIcon, UserIcon, ArrowRightIcon } from "@/components/ui/icons";
 import { GoogleIcon } from "@/components/auth/GoogleIcon";
 import { isValidEmail } from "@/lib/auth/validation";
-import { useProgressSync } from "@/lib/progress/useProgressSync";
 import { registerUserAction } from "@/modules/auth";
 
 export interface RegisterScreenProps {
   onSwitchToLogin: () => void;
-  onSuccess: () => void;
+  /**
+   * Фаза FIXES, задача F.26: після успішного кроку 1 (форма
+   * реєстрації) реальний `User` ще НЕ створено — модалка перемикається
+   * на екран вводу коду (`VerifyEmailScreen`), а не одразу закривається.
+   * Замінює колишній `onSuccess` — сам логін/закриття модалки/синхронізація
+   * гостьового прогресу тепер відбуваються там, після підтвердження коду.
+   */
+  onSwitchToVerify: (email: string) => void;
 }
 
 interface FieldErrors {
@@ -26,9 +31,7 @@ interface FieldErrors {
   agree?: string;
 }
 
-export function RegisterScreen({ onSwitchToLogin, onSuccess }: RegisterScreenProps) {
-  const { update: updateSession } = useSession();
-  const { syncProgress } = useProgressSync();
+export function RegisterScreen({ onSwitchToLogin, onSwitchToVerify }: RegisterScreenProps) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -69,14 +72,12 @@ export function RegisterScreen({ onSwitchToLogin, onSuccess }: RegisterScreenPro
       if (!res.success) {
         setFormError(res.error || "Не вдалося зареєструватися. Спробуйте ще раз.");
       } else {
-        // Той самий фікс, що й у LoginScreen: після авто-логіну на сервері
-        // потрібен явний рефетч клієнтської сесії, щоб Header оновився
-        // одразу, без очікування window focus (задача 2.14).
-        await updateSession();
-        // Задача 7.6: після успішної реєстрації — one-time мерж
-        // localStorage-прогресу гостя в БД.
-        await syncProgress();
-        onSuccess();
+        // F.26: реального User ще нема — лист із кодом надіслано,
+        // перемикаємось на екран підтвердження. Рефетч сесії
+        // (`updateSession`) і one-time мерж гостьового прогресу
+        // (задача 7.6, `syncProgress`) переїхали у `VerifyEmailScreen`,
+        // бо саме там тепер відбувається реальний авто-логін.
+        onSwitchToVerify(email);
       }
     } catch {
       setFormError("Не вдалося зареєструватися. Спробуйте ще раз.");

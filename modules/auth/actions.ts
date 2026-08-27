@@ -3,7 +3,13 @@
 import { ZodError } from "zod";
 import { cookies } from "next/headers";
 import { signIn, signOut } from "@/auth";
-import { registerUserService, requestPasswordResetService, resetPasswordService } from "./service";
+import {
+  requestRegistrationService,
+  requestPasswordResetService,
+  resetPasswordService,
+  verifyRegistrationCodeService,
+  resendRegistrationCodeService,
+} from "./service";
 import {
   LoginInput,
   RegisterInput,
@@ -13,6 +19,10 @@ import {
   ForgotPasswordSchema,
   ResetPasswordInput,
   ResetPasswordSchema,
+  VerifyRegistrationInput,
+  VerifyRegistrationSchema,
+  ResendRegistrationCodeInput,
+  ResendRegistrationCodeSchema,
 } from "./schema";
 import { AuthError } from "next-auth";
 import {
@@ -21,6 +31,10 @@ import {
   clearLoginAttempts,
   isPasswordResetRateLimited,
   recordPasswordResetRequest,
+  isRegistrationRateLimited,
+  recordRegistrationRequest,
+  isResendCodeRateLimited,
+  recordResendCodeRequest,
 } from "@/lib/auth/rateLimit";
 
 /**
@@ -74,24 +88,85 @@ async function applyRememberMePreference(remember: boolean) {
   });
 }
 
+/**
+ * Фаза FIXES, задача F.26 (підтвердження email кодом перед
+ * реєстрацією). Крок 1 — раніше ця дія одразу створювала `User` і
+ * логінила; тепер лише запускає `requestRegistrationService`
+ * (пише `PendingRegistration`, шле лист з кодом) і повертає успіх БЕЗ
+ * сесії. Throttle за email (окремий лічильник, той самий принцип, що
+ * вже `isPasswordResetRateLimited`) — щоб форму реєстрації не можна
+ * було використати для email-бомбінгу довільної адреси.
+ */
 export async function registerUserAction(input: RegisterInput) {
   try {
     const validated = RegisterSchema.parse(input);
-    await registerUserService(validated);
+    const rateLimitKey = validated.email.toLowerCase();
 
-    await signIn("credentials", {
-      email: validated.email,
-      password: validated.password,
-      redirect: false,
-    });
+    if (isRegistrationRateLimited(rateLimitKey)) {
+      return {
+        success: false,
+        error: "Забагато запитів реєстрації. Спробуйте ще раз через 15 хвилин.",
+      };
+    }
+
+    recordRegistrationRequest(rateLimitKey);
+    await requestRegistrationService(validated);
 
     return { success: true, error: null };
   } catch (err: unknown) {
-    if (err instanceof AuthError) {
-      return { success: false, error: "Помилка авто-входу після реєстрації" };
-    }
     const message = err instanceof Error ? err.message : "Не вдалося зареєструватися";
     return { success: false, error: message };
+  }
+}
+
+/**
+ * Крок 2 — виклик з `VerifyEmailScreen.tsx` після вводу коду з листа.
+ * `verifyRegistrationCodeService` створює реального `User` лише при
+ * правильному коді й повертає короткоживучий `signInToken`
+ * (`lib/auth/postRegistrationToken.ts`) — саме він, а не пароль, іде у
+ * `signIn` нижче (рішення по відкритому питанню F.26.9.1: пароль ніде
+ * не тримається в клієнтському стані між кроками).
+ */
+export async function verifyRegistrationCodeAction(input: VerifyRegistrationInput) {
+  try {
+    const validated = VerifyRegistrationSchema.parse(input);
+    const { signInToken } = await verifyRegistrationCodeService(validated);
+
+    await signIn("credentials", { registrationToken: signInToken, redirect: false });
+
+    return { success: true as const, error: null };
+  } catch (err: unknown) {
+    if (err instanceof AuthError) {
+      return { success: false as const, error: "Помилка авто-входу після підтвердження" };
+    }
+    const message = formatAuthActionError(err, "Не вдалося підтвердити код");
+    return { success: false as const, error: message };
+  }
+}
+
+/**
+ * "Надіслати код ще раз" на екрані підтвердження. Throttle — окремий,
+ * короткий (60 сек) кулдаун (`isResendCodeRateLimited`), відмінний від
+ * throttle кроку 1 вище — там рахуються самі СПРОБИ РЕЄСТРАЦІЇ (рідкі),
+ * тут — саме запити повторного листа (очікувано частіші, але все одно
+ * не мають ставати інструментом спаму).
+ */
+export async function resendRegistrationCodeAction(input: ResendRegistrationCodeInput) {
+  try {
+    const validated = ResendRegistrationCodeSchema.parse(input);
+    const rateLimitKey = validated.email.toLowerCase();
+
+    if (isResendCodeRateLimited(rateLimitKey)) {
+      return { success: false as const, error: "Зачекайте трохи перед повторним надсиланням." };
+    }
+
+    recordResendCodeRequest(rateLimitKey);
+    await resendRegistrationCodeService(validated.email);
+
+    return { success: true as const, error: null };
+  } catch (err: unknown) {
+    const message = formatAuthActionError(err, "Не вдалося надіслати код");
+    return { success: false as const, error: message };
   }
 }
 

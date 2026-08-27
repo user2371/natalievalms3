@@ -15,6 +15,7 @@ import { ProfileHeroSkeleton } from "@/components/skeletons/ProfileHeroSkeleton"
 import { Skeleton } from "@/components/ui/Skeleton";
 import { CertificateThumbnailSkeleton } from "@/components/skeletons/CertificateThumbnailSkeleton";
 import { EditIcon, ArrowRightIcon } from "@/components/ui/icons";
+import { FALLBACK_AVATAR_SRC } from "@/components/ui/Avatar";
 import { getPublicProfileAction } from "@/modules/profile/actions";
 import { getCertificatesForUserAction } from "@/modules/certificates";
 import type { PublicProfile } from "@/modules/profile/service";
@@ -22,8 +23,15 @@ import type { CertificateEntry } from "@/modules/certificates";
 
 const VISIBLE_CERTIFICATES = 5;
 
-/** Заглушка для великого "фото" в `ProfileHero`, коли в реального юзера немає `avatarUrl` (задача 6.6.18). */
-const FALLBACK_PROFILE_PHOTO = "/profileDemoPhoto.jpg";
+/**
+ * Заглушка для великого "фото" в `ProfileHero`, коли в реального юзера
+ * немає `avatarUrl` (задача 6.6.18). Оновлено (F.28): був
+ * `profileDemoPhoto.jpg` — реальне фото конкретної людини в холодних
+ * тонах, що не пасувало до теплої кольорової гами додатку. Замінено на
+ * новий мінімалістичний SVG-силует у фірмових кольорах (той самий файл,
+ * що й на `/profile`/`/settings`, `app/globals.css`).
+ */
+const FALLBACK_PROFILE_PHOTO = FALLBACK_AVATAR_SRC;
 /** Заглушка для обкладинки курсу в `CourseProgressRow` (вимагає non-null string), коли `Course.coverImage` не задано в адмінці. */
 const FALLBACK_COURSE_COVER = "/heroImage.png";
 
@@ -87,15 +95,29 @@ export default function UserProfilePage({ params }: UserProfilePageProps) {
 
   useEffect(() => {
     let cancelled = false;
-    getPublicProfileAction(id).then((result) => {
-      if (cancelled) return;
-      setProfile(result.success ? result.profile : null);
-    });
-    getCertificatesForUserAction(id).then((result) => {
-      if (!cancelled && result.success) {
-        setCertificates(result.certificates);
-      }
-    });
+    getPublicProfileAction(id)
+      .then((result) => {
+        if (cancelled) return;
+        setProfile(result.success ? result.profile : null);
+      })
+      .catch(() => {
+        // Раніше без .catch(): якщо запит падав (мережа, помилка серверного
+        // рендеру відповіді тощо), .then() ніколи не викликався, і
+        // `profile` навічно лишався `undefined` — сторінка застрягала на
+        // скелетоні без жодного індикатора помилки. Тепер падіння запиту
+        // трактується так само, як "профіль не знайдено" (нижче — `notFound()`).
+        if (!cancelled) setProfile(null);
+      });
+    getCertificatesForUserAction(id)
+      .then((result) => {
+        if (!cancelled && result.success) {
+          setCertificates(result.certificates);
+        }
+      })
+      .catch(() => {
+        // Сертифікати — другорядні дані; якщо запит падає, просто лишаємо
+        // порожній список замість того, щоб мовчки ковтати необроблений reject.
+      });
     return () => {
       cancelled = true;
     };

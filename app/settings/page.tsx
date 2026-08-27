@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { Switch } from "@/components/ui/Switch";
 import { Modal } from "@/components/ui/Modal";
 import { GearIcon, EditIcon, TrashIcon, MailIcon, LockIcon } from "@/components/ui/icons";
+import { FALLBACK_AVATAR_SRC } from "@/components/ui/Avatar";
 import { useHomeworkVisibility } from "@/lib/progress/useLocalSettings";
 import {
   getPublicProfileAction,
@@ -30,8 +31,14 @@ import type { PublicProfile } from "@/modules/profile/service";
 import { cn } from "@/lib/utils";
 export const dynamic = 'force-dynamic'
 const BIO_MAX_LENGTH = 500;
-/** Заглушка фото профілю (той самий підхід, що на `/profile`/`/users/[id]`), коли в юзера ще немає завантаженої аватарки. */
-const FALLBACK_PROFILE_PHOTO = "/profileDemoPhoto.jpg";
+/**
+ * Заглушка фото профілю (той самий підхід, що на `/profile`/`/users/[id]`),
+ * коли в юзера ще немає завантаженої аватарки. Оновлено (F.28): був
+ * `profileDemoPhoto.jpg` — реальне фото конкретної людини в холодних
+ * тонах, що не пасувало до теплої кольорової гами додатку. Замінено на
+ * новий мінімалістичний SVG-силует у фірмових кольорах.
+ */
+const FALLBACK_PROFILE_PHOTO = FALLBACK_AVATAR_SRC;
 
 /**
  * Сторінка "Налаштування" (`/settings`), за мокапом `SettingsaPage.png`
@@ -251,13 +258,18 @@ export default function SettingsPage() {
   // до завершення запиту).
   useEffect(() => {
     if (!realUserId) return;
-    getPublicProfileAction(realUserId).then((result) => {
-      if (result.success) {
-        setHomeworkVisible(result.profile.homeworkVisible);
-        setProfile(result.profile);
-        setBio(result.profile.bio ?? "");
-      }
-    });
+    getPublicProfileAction(realUserId)
+      .then((result) => {
+        if (result.success) {
+          setHomeworkVisible(result.profile.homeworkVisible);
+          setProfile(result.profile);
+          setBio(result.profile.bio ?? "");
+        }
+      })
+      .catch(() => {
+        // Best-effort підвантаження — при падінні запиту просто лишаємо
+        // локальні дефолти (без .catch() — необроблений reject).
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realUserId]);
 
