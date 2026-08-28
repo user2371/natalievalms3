@@ -8,6 +8,7 @@ import { RouteTransitionOverlay } from "@/components/layout/RouteTransitionOverl
 import { ProgressSyncToast } from "@/components/progress/ProgressSyncToast";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { StoreProvider } from "@/lib/store/StoreProvider";
+export const dynamic = 'force-dynamic'
 
 const inter = Inter({
   variable: "--font-inter",
