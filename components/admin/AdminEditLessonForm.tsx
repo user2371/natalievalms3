@@ -20,10 +20,15 @@ export function AdminEditLessonForm({
   lesson,
   quizHref,
   articleHref,
+  homeworkHref,
+  hasHomeworkAssignment,
 }: {
   lesson: Lesson;
   quizHref: string;
   articleHref: string;
+  /** ФАЗА HW+, задача HW+.3.3 — той самий принцип, що й `articleHref`. */
+  homeworkHref: string;
+  hasHomeworkAssignment: boolean;
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -60,6 +65,8 @@ export function AdminEditLessonForm({
       }}
       quizHref={quizHref}
       articleHref={articleHref}
+      homeworkHref={homeworkHref}
+      hasHomeworkAssignment={hasHomeworkAssignment}
       onCancel={() => router.push(`/admin/courses/${lesson.courseId}/lessons`)}
       onSubmit={handleSubmit}
       submitError={error}

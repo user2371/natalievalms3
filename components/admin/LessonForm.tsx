@@ -23,6 +23,10 @@ export interface LessonFormProps {
   quizHref?: string;
   /** Посилання на редактор статті (задача 0.18) — тільки для вже збереженого уроку, той самий принцип, що й `quizHref`. */
   articleHref?: string;
+  /** ФАЗА HW+, задача HW+.3.3 (28.08.2026) — посилання на редактор ДЗ, той самий принцип, що й `articleHref`. */
+  homeworkHref?: string;
+  /** ФАЗА HW+, HW+.3.3 — чи вже збережено опис ДЗ для цього уроку (визначає напис кнопки: "Додати"/"Редагувати"). */
+  hasHomeworkAssignment?: boolean;
   onCancel: () => void;
   onSubmit: (values: LessonFormValues) => void;
   submitLabel?: string;
@@ -71,6 +75,8 @@ export function LessonForm({
   initial,
   quizHref,
   articleHref,
+  homeworkHref,
+  hasHomeworkAssignment = false,
   onCancel,
   onSubmit,
   submitLabel = "Зберегти",
@@ -170,6 +176,29 @@ export function LessonForm({
         ) : (
           <p className="text-sm text-muted">
             Стаття буде доступна після збереження уроку.
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-medium text-ink">Домашнє завдання до уроку</label>
+        {homeworkHref ? (
+          <div>
+            <Link href={homeworkHref}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                icon={<EditIcon size={16} />}
+                iconPosition="left"
+              >
+                {hasHomeworkAssignment ? "Редагувати ДЗ" : "Додати ДЗ"}
+              </Button>
+            </Link>
+          </div>
+        ) : (
+          <p className="text-sm text-muted">
+            Домашнє завдання буде доступне після збереження уроку.
           </p>
         )}
       </div>

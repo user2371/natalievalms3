@@ -6,10 +6,13 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { CheckIcon, YoutubeIcon } from "@/components/ui/icons";
-import { DEFAULT_HOMEWORK_ITEMS } from "@/lib/data/lessons";
 import { submitHomeworkAction } from "@/modules/homework";
+import { extractYoutubeId } from "@/lib/youtube";
 import { useAuthModal } from "@/components/auth/AuthModalContext";
 import { GuestHomeworkBanner } from "@/components/lesson/GuestHomeworkBanner";
+import { VideoPlayer } from "@/components/lesson/VideoPlayer";
+import { HomeworkAssignmentRenderer } from "@/components/lesson/HomeworkAssignmentRenderer";
+import type { HomeworkAssignment } from "@/modules/homeworkAssignments";
 
 const NETWORK_ERROR_MESSAGE = "Проблема з мережею. Перевір з'єднання і спробуй ще раз.";
 
@@ -17,6 +20,12 @@ export interface RealHomeworkBlockProps {
   lessonId: string;
   /** Уже здане відео цього уроку (з сервера, `getHomeworkForLessonService`) — `null`, якщо ще не здавали або гість. */
   initialVideoUrl: string | null;
+  /**
+   * ФАЗА HW+, задача HW+.4.3 (28.08.2026) — адмінський опис ДЗ уроку
+   * (`getHomeworkAssignmentByLessonIdService`). `null`, якщо адмін ще
+   * нічого не задав для цього уроку.
+   */
+  assignment: HomeworkAssignment | null;
   className?: string;
 }
 
@@ -34,15 +43,22 @@ export interface RealHomeworkBlockProps {
  *   `try/catch` навколо виклику дії з окремим повідомленням для мережевого
  *   збою (задача 9.14), що вже застосовано в `RealCommentsBlock.tsx`.
  *
- * Пункти ДЗ (чекліст) лишаються статичними (`DEFAULT_HOMEWORK_ITEMS`) — у
- * Prisma-схемі немає окремого поля/моделі для кастомних пунктів ДЗ на
- * урок, і це не входило до знайдених прогалин 9.15 (сам сценарій вимагав
- * лише робочої ЗДАЧІ відео, не редагованого адміном чекліста) — окрема
- * майбутня задача, якщо знадобиться.
+ * **ФАЗА HW+ (28.08.2026, HW+.4.2):** статичний захардкожений чекліст
+ * `DEFAULT_HOMEWORK_ITEMS` прибрано. Замість нього — реальний, редагований
+ * адміном контент (`assignment.contentJson`/`assignment.videoUrl`, окремо
+ * на кожен урок, `modules/homeworkAssignments`):
+ * - якщо `assignment` є, і хоч одне з полів непорожнє — рендериться текст
+ *   (`HomeworkAssignmentRenderer`) і/або відео-інструкція (`VideoPlayer`);
+ * - інакше — "До цього уроку домашнього завдання немає" замість опису.
+ * Форма ЗДАЧІ відповіді студентом лишається доступною НАВІТЬ у порожньому
+ * стані (рішення задокументоване в `TASKS_DETAILED.md`, HW+.4.2) — порожній
+ * опис найімовірніше означає "адмін ще не встиг заповнити", а не "уроку
+ * точно без ДЗ".
  */
 export function RealHomeworkBlock({
   lessonId,
   initialVideoUrl,
+  assignment,
   className,
 }: RealHomeworkBlockProps) {
   const { status } = useSession();
@@ -56,6 +72,13 @@ export function RealHomeworkBlock({
   const [pending, setPending] = useState(false);
 
   const showForm = editing || !submittedUrl;
+
+  const hasText = Boolean(assignment?.contentJson && assignment.contentJson.trim());
+  const assignmentContentJson = assignment?.contentJson ?? "";
+  const assignmentYoutubeId = assignment?.videoUrl
+    ? extractYoutubeId(assignment.videoUrl)
+    : null;
+  const hasAssignmentContent = hasText || Boolean(assignmentYoutubeId);
 
   async function handleSubmit() {
     const trimmed = link.trim();
@@ -88,16 +111,20 @@ export function RealHomeworkBlock({
     <Card padding="lg" className={className}>
       <h2 className="font-serif text-xl text-ink">Домашнє завдання</h2>
 
-      <ul className="mt-4 flex flex-col gap-2.5">
-        {DEFAULT_HOMEWORK_ITEMS.map((item, index) => (
-          <li key={index} className="flex items-start gap-2.5 text-sm text-ink/90">
-            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-soft/60 text-accent-dark">
-              <CheckIcon size={12} />
-            </span>
-            {item}
-          </li>
-        ))}
-      </ul>
+      {hasAssignmentContent ? (
+        <div className="mt-4 flex flex-col gap-4">
+          {assignmentYoutubeId && (
+            <VideoPlayer
+              provider="YOUTUBE"
+              videoId={assignmentYoutubeId}
+              title="Відео-інструкція до домашнього завдання"
+            />
+          )}
+          {hasText && <HomeworkAssignmentRenderer contentJson={assignmentContentJson} />}
+        </div>
+      ) : (
+        <p className="mt-4 text-sm text-muted">До цього уроку домашнього завдання немає</p>
+      )}
 
       <div className="mt-5 border-t border-rose-line/30 pt-5">
         {!loggedIn ? (
@@ -170,3 +197,4 @@ export function RealHomeworkBlock({
     </Card>
   );
 }
+

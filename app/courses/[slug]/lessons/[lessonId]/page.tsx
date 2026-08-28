@@ -21,6 +21,7 @@ import { getQuizQuestionsForLessonService } from "@/modules/quizzes";
 import { getCommentsByLessonIdService } from "@/modules/comments";
 import { getArticleByLessonIdService } from "@/modules/articles";
 import { getHomeworkForLessonService } from "@/modules/homework";
+import { getHomeworkAssignmentByLessonIdService } from "@/modules/homeworkAssignments";
 
 interface CourseLessonPageProps {
   params: Promise<{ slug: string; lessonId: string }>;
@@ -58,6 +59,11 @@ export async function generateMetadata({
 /**
  * `/courses/[slug]/lessons/[lessonId]` (задача 3.15) — сторінка РЕАЛЬНОГО
  * (Prisma) уроку.
+ *
+ * 28.08.2026 (ФАЗА HW+, задача HW+.4.3): `RealHomeworkBlock` тепер також
+ * отримує `assignment` (`getHomeworkAssignmentByLessonIdService`) —
+ * редагований адміном опис ДЗ (текст + відео-інструкція YouTube) окремо
+ * на кожен урок, замість статичного `DEFAULT_HOMEWORK_ITEMS`.
  *
  * 01.08.2026 (задача 9.15, виправлення прогалини 1 — реальна здача ДЗ):
  * `RealHomeworkBlock` тепер рендериться (раніше свідомо був виключений —
@@ -117,7 +123,7 @@ export default async function CourseLessonPage({ params }: CourseLessonPageProps
     }
   }
 
-  const [lesson, lessons, quizQuestions, comments, article, myHomework] =
+  const [lesson, lessons, quizQuestions, comments, article, myHomework, homeworkAssignment] =
     await Promise.all([
       getLessonByIdService(lessonId).catch(() => null),
       listLessonsService(course.id).catch(() => []),
@@ -127,6 +133,7 @@ export default async function CourseLessonPage({ params }: CourseLessonPageProps
       userId
         ? getHomeworkForLessonService(lessonId, userId).catch(() => null)
         : Promise.resolve(null),
+      getHomeworkAssignmentByLessonIdService(lessonId).catch(() => null),
     ]);
 
   if (!lesson || lesson.courseId !== course.id) {
@@ -199,6 +206,7 @@ export default async function CourseLessonPage({ params }: CourseLessonPageProps
             <RealHomeworkBlock
               lessonId={lesson.id}
               initialVideoUrl={myHomework?.videoUrl ?? null}
+              assignment={homeworkAssignment}
               className="mt-6"
             />
 

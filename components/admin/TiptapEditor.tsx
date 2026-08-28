@@ -4,7 +4,7 @@ import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import TiptapLink from "@tiptap/extension-link";
 import TiptapImage from "@tiptap/extension-image";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export interface TiptapEditorProps {
@@ -13,6 +13,14 @@ export interface TiptapEditorProps {
   /** Викликається при КОЖНІЙ зміні документа — `editor.getJSON()` як рядок (задача 8.3.3, зберігає викликач форми). */
   onChangeJson: (json: string) => void;
   editable?: boolean;
+  /**
+   * ФАЗА HW+, задача HW+.2.1 (28.08.2026). Опційний реальний аплоад
+   * зображення — повертає URL уже завантаженого файлу. Якщо передано,
+   * кнопка тулбара "Зображення" відкриває файловий пікер замість
+   * `window.prompt` за URL. Якщо НЕ передано (як і досі для
+   * `AdminArticleEditor.tsx`/статей) — стара поведінка без жодних змін.
+   */
+  onUploadImage?: (file: File) => Promise<string>;
 }
 
 const EXTENSIONS = [
@@ -34,21 +42,33 @@ interface ToolbarButtonProps {
   onClick: () => void;
   active?: boolean;
   label: string;
+  disabled?: boolean;
+  ariaBusy?: boolean;
   children: React.ReactNode;
 }
 
-function ToolbarButton({ onClick, active, label, children }: ToolbarButtonProps) {
+function ToolbarButton({
+  onClick,
+  active,
+  label,
+  disabled,
+  ariaBusy,
+  children,
+}: ToolbarButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
       aria-pressed={active}
+      aria-busy={ariaBusy}
+      disabled={disabled}
       className={cn(
         "flex h-7 min-w-7 items-center justify-center rounded-lg px-1.5 text-xs font-semibold transition-colors",
         active
           ? "bg-accent-soft text-accent-dark"
           : "text-muted hover:bg-cream-soft hover:text-ink",
+        disabled && "cursor-not-allowed opacity-60",
       )}
     >
       {children}
@@ -56,7 +76,16 @@ function ToolbarButton({ onClick, active, label, children }: ToolbarButtonProps)
   );
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+interface ToolbarProps {
+  editor: Editor;
+  /** ФАЗА HW+, HW+.2.1 — див. `TiptapEditorProps.onUploadImage`. */
+  onUploadImage?: (file: File) => Promise<string>;
+}
+
+function Toolbar({ editor, onUploadImage }: ToolbarProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
   function addLink() {
     const previousUrl = editor.getAttributes("link").href as string | undefined;
     const url = window.prompt("Посилання (URL):", previousUrl ?? "https://");
@@ -68,10 +97,41 @@ function Toolbar({ editor }: { editor: Editor }) {
     editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
   }
 
+  /**
+   * HW+.2.1 — якщо `onUploadImage` передано, кнопка відкриває
+   * прихований `<input type="file">` (той самий UI-патерн, що
+   * `UploadCertificateModal`, але без модалки — сам тулбар); інакше —
+   * стара поведінка (`window.prompt` за URL), без жодних змін.
+   */
   function addImage() {
+    if (onUploadImage) {
+      fileInputRef.current?.click();
+      return;
+    }
     const url = window.prompt("URL зображення:");
     if (!url) return;
     editor.chain().focus().setImage({ src: url }).run();
+  }
+
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    // Скидаємо значення одразу — щоб повторний вибір ТОГО САМОГО файлу
+    // знову спрацював (браузер інакше не викликає onChange вдруге).
+    e.target.value = "";
+    if (!file || !onUploadImage) return;
+
+    setUploading(true);
+    try {
+      const url = await onUploadImage(file);
+      editor.chain().focus().setImage({ src: url }).run();
+    } catch (err) {
+      // HW+.2.1 — мінімальний UX при помилці: `window.alert`, той самий
+      // рівень, що вже в `addLink`/старому `addImage` (обидва теж без
+      // спеціального UI-стану помилки).
+      window.alert(err instanceof Error ? err.message : "Не вдалося завантажити зображення");
+    } finally {
+      setUploading(false);
+    }
   }
 
   return (
@@ -131,9 +191,23 @@ function Toolbar({ editor }: { editor: Editor }) {
       <ToolbarButton label="Посилання" active={editor.isActive("link")} onClick={addLink}>
         🔗
       </ToolbarButton>
-      <ToolbarButton label="Зображення" onClick={addImage}>
-        🖼
+      <ToolbarButton
+        label="Зображення"
+        onClick={addImage}
+        disabled={uploading}
+        ariaBusy={uploading}
+      >
+        {uploading ? "⏳" : "🖼"}
       </ToolbarButton>
+      {onUploadImage && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={handleFileSelected}
+        />
+      )}
     </div>
   );
 }
@@ -157,6 +231,7 @@ export function TiptapEditor({
   initialContentJson,
   onChangeJson,
   editable = true,
+  onUploadImage,
 }: TiptapEditorProps) {
   const editor = useEditor({
     extensions: EXTENSIONS,
@@ -193,7 +268,7 @@ export function TiptapEditor({
 
   return (
     <div className="overflow-hidden rounded-xl border border-rose-line/60 bg-white focus-within:border-accent">
-      {editable && <Toolbar editor={editor} />}
+      {editable && <Toolbar editor={editor} onUploadImage={onUploadImage} />}
       <EditorContent editor={editor} />
     </div>
   );

@@ -104,6 +104,7 @@ model Lesson {
   progress            Progress[]
   comments            Comment[]
   homeworkSubmissions HomeworkSubmission[]
+  homeworkAssignment  HomeworkAssignment?
 
   @@index([courseId, order])
 }
@@ -112,6 +113,23 @@ model Article {
   id          String   @id @default(uuid())
   lessonId    String   @unique
   contentJson String
+  updatedAt   DateTime @updatedAt
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+}
+
+// ФАЗА HW+, задача HW+.0.1 (28.08.2026) — ОКРЕМА від `HomeworkSubmission`
+// (нижче): це опис завдання, який пише АДМІН для уроку (текст + відео-
+// інструкція), не здача студентом свого відео у відповідь. Один опис на
+// урок (`lessonId @unique`, той самий принцип, що `Article.lessonId`/
+// `Quiz.lessonId`). `contentJson`/`videoUrl` — обидва `String?` (не
+// `String` з порожнім рядком за замовчуванням), щоб "нічого не задано"
+// відрізнялося від "задано порожній текст" на рівні типів.
+model HomeworkAssignment {
+  id          String   @id @default(uuid())
+  lessonId    String   @unique
+  contentJson String?
+  videoUrl    String?
   updatedAt   DateTime @updatedAt
 
   lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)

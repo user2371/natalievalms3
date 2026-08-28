@@ -5255,3 +5255,297 @@ certificates` мали той самий білий екран і для дру�
 **Файли:** `public/defaultProfilePhoto.svg` (новий),
 `app/profile/page.tsx`, `app/users/[id]/page.tsx`,
 `app/settings/page.tsx`, `TASKS_DETAILED.md`, `IMPLEMENTATION_STATUS.md`.
+
+## ФАЗА HW+ — Домашнє завдання: адмінський контент уроку (28.08.2026, РЕАЛІЗОВАНО)
+
+За прямим проханням користувача: зараз пункти ДЗ на сторінці уроку —
+статичний захардкожений чекліст (`DEFAULT_HOMEWORK_ITEMS`,
+`lib/data/lessons.ts`), однаковий для всіх уроків, недоступний для
+редагування з адмінки (задокументовано як свідома прогалина в docblock
+`RealHomeworkBlock.tsx`, задача 9.15). Потрібно зробити цей контент
+реальним і редагованим адміном ОКРЕМО на кожен урок:
+- текстовий редактор з підтримкою РЕАЛЬНОГО завантаження зображень
+  (не URL — фактичний аплоад файлу, як уже є для сертифікатів/аватарки);
+- відео інструкції до ДЗ — ЛИШЕ посилання (без завантаження файлу
+  відео, той самий підхід, що вже для відео самого уроку);
+- якщо адмін нічого не додав (ні тексту, ні відео) — студент бачить
+  текст "До цього уроку домашнього завдання немає" замість порожнього
+  блоку.
+
+**Розвідка — з чим це не можна плутати:** у Prisma-схемі вже є модель
+`HomeworkSubmission` (`userId`, `lessonId`, `videoUrl`) — це ЗДАЧА
+студентом свого відео у відповідь на завдання (`modules/homework`,
+`RealHomeworkBlock.tsx`, задача 9.15). Ця фаза — про ІНШУ сутність:
+сам ОПИС завдання, який пише адмін, до будь-якої здачі. Тому — окрема
+нова Prisma-модель і окремий модуль (`modules/homeworkAssignments`),
+а не розширення `modules/homework`, щоб не змішувати "що адмін задав"
+і "що студент здав" у ту саму таблицю/модуль (той самий принцип
+розділення, що вже між `Certificate` (видача) і майбутнім завантаженням
+студента в CERT+ — там теж різні джерела запису в ОДНУ таблицю через
+`source`, але тут природа даних інша: адмінський контент і студентська
+здача НЕ повинні жити в одному рядку/списку, бо один запис на урок
+(адмін), а других — по одному на кожного студента).
+
+Технічна база для обох частин (реальний аплоад зображень, редактор
+тексту) уже є в проєкті й буде повторно використана:
+- `TiptapEditor.tsx` (задачі 8.3.1–8.3.2, зараз для `Article`) — та сама
+  бібліотека/розширення (`StarterKit` + `extension-link` +
+  `extension-image`), але кнопка "Зображення" зараз вставляє URL через
+  `window.prompt` (задокументовано в docblock як свідомий компроміс
+  "немає підключеного файлового сховища" — це вже НЕ так, сховище є з
+  Фази IMG+/CERT+, просто `TiptapEditor` це не використовує).
+- `lib/storage/certificateStorage.ts` + `lib/images/processUploadedImage.ts`
+  (Sharp-пайплайн, IMG+.1) — той самий контракт-абстракція
+  (`saveXImage(ownerId, file): Promise<{url, publicId, width, height,
+  sizeBytes}>`) буде повторений для нового `lib/storage/
+  homeworkImageStorage.ts`, з тим самим уроком CERT+.1.6 щодо
+  `fs`-бандлингу (Cloudinary-код лише у файлі, який транзитивно тягне
+  ТІЛЬКИ захищений `"use server"`-кордон, ніколи не через незахищений
+  barrel).
+- `AdminArticleEditor.tsx` + маршрут `/admin/courses/[courseId]/
+  lessons/[lessonId]/article` (задачі 8.3.1–8.3.5) — та сама форма
+  "клієнтська обгортка над Tiptap + кнопка Зберегти + перемикач
+  Редагувати/Перегляд", буде скопійована для ДЗ на паралельний маршрут
+  `.../homework`, з `ArticleRenderer` як референс для нового
+  `HomeworkAssignmentRenderer` (обидва — просто рендер Tiptap JSON,
+  той самий набір розширень).
+- `lib/youtube.ts::isYoutubeUrl`/`VideoPlayer.tsx` — те саме, що вже
+  валідує/рендерить відео уроку (`Lesson.videoUrl`) і відео здачі ДЗ
+  студентом (`HomeworkSubmission.videoUrl`), повторно для нового поля
+  `HomeworkAssignment.videoUrl`. **Припущення (позначити явно):**
+  відео інструкції до ДЗ — YouTube-посилання, той самий підхід, що
+  для ВСІХ інших відео в проєкті (жодне з них не приймає довільний
+  URL) — якщо потрібен довільний хостинг відео, це окреме уточнення
+  до цього плану ПЕРЕД реалізацією HW+.1.3/HW+.3.1.
+
+### HW+.0 Спільні рішення (зафіксувати перед першою підзадачею)
+
+- [x] HW+.0.1 **Модель даних.** Нова модель `HomeworkAssignment`
+      (`prisma/schema.prisma`), окрема від `HomeworkSubmission` (див.
+      розвідку вище):
+      ```prisma
+      model HomeworkAssignment {
+        id          String   @id @default(uuid())
+        lessonId    String   @unique
+        contentJson String?
+        videoUrl    String?
+        updatedAt   DateTime @updatedAt
+
+        lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+      }
+      ```
+      `lessonId @unique` — один опис ДЗ на урок (той самий принцип,
+      що `Article.lessonId`/`Quiz.lessonId`). Обидва поля контенту
+      `String?` (не `String` з порожнім рядком за замовчуванням) — щоб
+      "нічого не задано" (HW+.4.2, порожній стан) відрізнялося від
+      "задано порожній текст" на рівні типів, а не рядкових угод.
+      Додати зворотний бік зв'язку `homeworkAssignment
+      HomeworkAssignment?` у `model Lesson`.
+- [x] HW+.0.2 Нова Prisma-міграція
+      `prisma/migrations/<timestamp>_homework_assignments/migration.sql`
+      — той самий підхід, що в CERT+.0.2/IMG+ (`CREATE TABLE
+      "HomeworkAssignment"...`, `FOREIGN KEY`, `UNIQUE` на `lessonId`).
+      Позначити ФАКТИЧНОЮ датою застосування.
+- [x] HW+.0.3 **Сховище зображень.** Новий
+      `lib/storage/homeworkImageStorage.ts` — та сама абстракція, що
+      `certificateStorage.ts`: `saveHomeworkImage(lessonId, file):
+      Promise<{url, publicId, width, height, sizeBytes}>` (Cloudinary,
+      `public_id = homework/{lessonId}/{uuid}` — за уроком, не за
+      юзером, бо це контент ОДНОГО адміна на ОДИН урок, не список по
+      юзерах, як сертифікати), `deleteHomeworkImage(publicId):
+      Promise<void>`. Той самий Sharp-пайплайн
+      (`processUploadedImage`, `maxDimension: 1600` — контент-зображення
+      в тексті, не повнорозмірний документ-скан, як сертифікат,
+      `quality: 80`).
+
+      **Свідома межа MVP (зафіксувати, а не замовчати):** на відміну
+      від `Certificate`, де кожне зображення — окремий рядок у БД
+      (`imagePublicId` зберігається, orphan-cleanup можливий), тут
+      зображення вбудовані ВСЕРЕДИНІ `contentJson` (Tiptap-документ) —
+      окремого реєстру `publicId` на кожну вставлену картинку немає.
+      Наслідок: якщо адмін вставив зображення, а потім видалив його з
+      тексту редактора (або переписав весь контент), файл лишається
+      "сиротою" в Cloudinary без автоматичного видалення. Той самий
+      клас обмеження вже мовчки існує для `Article` (там навіть URL, а
+      не аплоад) — свідомо не вирішуємо тут (окрема майбутня задача
+      "reconciliation-скрипт по контенту редакторів", якщо об'єм
+      сиротаінших файлів стане проблемою).
+- [x] HW+.0.4 **Ліміти файлу.** У новому `modules/homeworkAssignments/
+      schema.ts` — `HOMEWORK_IMAGE_ALLOWED_MIME_TYPES` (той самий набір,
+      що `CERTIFICATE_ALLOWED_MIME_TYPES` — jpeg/png/webp) і
+      `HOMEWORK_IMAGE_MAX_SIZE_BYTES` (5MB — контентне зображення в
+      тексті, ближче до аватарки за призначення, ніж 10MB-скан
+      сертифіката).
+
+### HW+.1 Модуль `modules/homeworkAssignments`
+
+- [x] HW+.1.1 `schema.ts` — `UpsertHomeworkAssignmentSchema` (`{
+      lessonId: string, contentJson: string | null, videoUrl: string
+      | null }`, порожній рядок нормалізується в `null` у `service.ts`,
+      той самий принцип, що вже в `modules/account/schema.ts` для
+      `bio`), тип `HomeworkAssignment` (дзеркалить Prisma-модель, той
+      самий підхід, що `modules/articles/schema.ts::Article`), плюс
+      константи з HW+.0.4.
+- [x] HW+.1.2 `repository.ts` — `findByLessonId(lessonId)`,
+      `upsert(lessonId, { contentJson, videoUrl })` (той самий `upsert`
+      по `lessonId`, що `modules/articles/repository.ts`).
+- [x] HW+.1.3 `service.ts` — `getHomeworkAssignmentByLessonIdService`
+      (READ, для сторінки уроку — і для адмінського редактора, і для
+      студента), `upsertHomeworkAssignmentService` (валідація через
+      Zod; якщо `videoUrl` непорожній — `isYoutubeUrl` перевірка, той
+      самий підхід і той самий текст помилки, що
+      `modules/homework/service.ts::submitHomeworkService`).
+- [x] HW+.1.4 `uploadService.ts` (ОКРЕМИЙ файл, НЕ `service.ts` —
+      той самий обов'язковий поділ, що CERT+.1.6, щоб уникнути
+      `Module not found: Can't resolve 'fs'` при випадковому
+      транзитивному імпорті на клієнт) — `uploadHomeworkImageService
+      (lessonId, file): Promise<{ url: string }>`: перевірка розміру/
+      MIME (HW+.0.4), виклик `saveHomeworkImage` (HW+.0.3), повертає
+      лише `url` (сам `publicId` НЕ зберігається — див. свідому межу
+      в HW+.0.3, тому й не потрібен викликачу).
+- [x] HW+.1.5 `actions.ts` (`"use server"`) — `assertAdmin()` (та сама
+      функція-патерн, що `modules/articles/actions.ts`):
+      - `upsertHomeworkAssignmentAction(input)` → `service.ts`,
+        `revalidatePath` на `/courses/[slug]/lessons/[lessonId]`
+        (динамічний, той самий синтаксис `"page"`, що вже в проєкті) і
+        `/admin/courses` (той самий набір шляхів, що
+        `upsertArticleAction`).
+      - `uploadHomeworkImageAction(formData)` → `assertAdmin()` →
+        дістає `lessonId`/`image` з `FormData` → `uploadService.ts` →
+        повертає `{ success, url, error }` (та сама форма відповіді,
+        що `uploadCertificateAction`).
+- [x] HW+.1.6 `index.ts` — barrel, що реекспортує ЛИШЕ з `actions.ts`
+      і "чистого" `service.ts` (`getHomeworkAssignmentByLessonIdService`
+      напряму — він не чіпає Cloudinary, той самий принцип, що
+      `modules/certificates/index.ts` після CERT+.1.6-фіксу), НІКОЛИ не
+      реекспортує `uploadService.ts`.
+
+### HW+.2 Реальне завантаження зображень у Tiptap-редакторі
+
+- [x] HW+.2.1 `TiptapEditor.tsx` — новий опційний проп
+      `onUploadImage?: (file: File) => Promise<string>` (повертає URL
+      уже завантаженого зображення). Кнопка тулбара "Зображення":
+      - якщо `onUploadImage` передано — відкриває приховвсаний
+        `<input type="file" accept="image/jpeg,image/png,image/webp">`
+        (той самий UI-патерн, що `UploadCertificateModal`, але без
+        модалки — сам тулбар), на вибір файлу викликає
+        `onUploadImage(file)`, показує стан завантаження на кнопці
+        (`aria-busy`, `⏳` замість `🖼`), після успіху —
+        `editor.chain().focus().setImage({ src: url }).run()`; при
+        помилці — `window.alert` з текстом помилки (мінімальний UX,
+        той самий рівень, що вже в `addLink`/старому `addImage` —
+        обидва теж без спеціального UI стану помилки).
+      - якщо `onUploadImage` НЕ передано — лишається старий `window.
+        prompt` (URL) без жодних змін поведінки. **Свідомо НЕ чіпаємо
+        `AdminArticleEditor.tsx`/статті в цій фазі** — стаття й далі
+        отримує зображення за URL, доки не буде окремого прохання
+        поширити реальний аплоад і на неї (проп додається як опційний
+        саме для цього — щоб стаття могла отримати цю ж можливість
+        пізніше без переписування `TiptapEditor`).
+- [x] HW+.2.2 Той самий компонент `Toolbar` — індикатор
+      завантаження (просте `disabled` на кнопці "Зображення" на час
+      запиту, щоб не можна було натиснути двічі, той самий принцип
+      `pending`-стану, що вже в `RealHomeworkBlock`/`RealCommentsBlock`).
+
+### HW+.3 Адмінський редактор ДЗ
+
+- [x] HW+.3.1 Новий `components/admin/AdminHomeworkEditor.tsx` — 1:1
+      структура `AdminArticleEditor.tsx` (перемикач Редагувати/
+      Перегляд, явна кнопка "Зберегти" без автозбереження — той самий
+      вибір 8.3.4, `TiptapEditor` тепер з `onUploadImage={(file) =>
+      uploadHomeworkImageAction(...).then(r => якщо success — url,
+      інакше throw)}`), ПЛЮС окреме поле під редактором — `Input`
+      "Посилання на відео-інструкцію (YouTube)" (аналогічно полю
+      `videoUrl` у `LessonForm.tsx`, той самий `YoutubeIcon`, що вже в
+      `RealHomeworkBlock.tsx`), необов'язкове. Кнопка "Зберегти"
+      викликає `upsertHomeworkAssignmentAction({ lessonId, contentJson,
+      videoUrl: videoUrl.trim() || null })`.
+- [x] HW+.3.2 Новий маршрут `app/admin/courses/[courseId]/lessons/
+      [lessonId]/homework/page.tsx` — 1:1 структура `.../article/
+      page.tsx` (Server Component, `getCourseByIdService` +
+      `getLessonByIdService` + `notFound()` при неспівпадінні,
+      `getHomeworkAssignmentByLessonIdService` для початкових даних,
+      `AdminPageHeader` з хлібними крихтами "Головна → Курси → {курс}
+      → Уроки → {урок} → Домашнє завдання").
+- [x] HW+.3.3 `LessonForm.tsx` — новий опційний проп `homeworkHref`
+      (той самий патерн, що `articleHref`): блок "Домашнє завдання до
+      уроку" з кнопкою "Додати ДЗ"/"Редагувати ДЗ" (текст кнопки — за
+      наявністю вже збереженого `HomeworkAssignment`, той самий підхід,
+      що напис кнопки статті зараз залежить від `values.articleText`),
+      і текст-заглушка "Домашнє завдання буде доступне після
+      збереження уроку", коли `homeworkHref` не передано (новий урок,
+      ще не збережений — той самий стан, що для `articleHref`).
+      `AdminEditLessonForm.tsx` — прокидає `homeworkHref` з нового
+      пропу сторінки `.../edit/page.tsx` (`/admin/courses/${courseId}/
+      lessons/${lessonId}/homework`, той самий шаблон, що вже для
+      `articleHref` там).
+
+### HW+.4 Показ адмінського ДЗ студенту
+
+- [x] HW+.4.1 Новий `components/lesson/HomeworkAssignmentRenderer.tsx`
+      — тонка обгортка над тим самим Tiptap-рендер-набором розширень,
+      що `ArticleRenderer.tsx` (STARTER_KIT + link + image, БЕЗ
+      редагованості — `editable={false}`), рендерить `contentJson`
+      завдання.
+- [x] HW+.4.2 **Порожній стан.** У `RealHomeworkBlock.tsx` — статичний
+      чекліст `DEFAULT_HOMEWORK_ITEMS` прибирається, замінюється на:
+      - якщо `assignment` є І (`assignment.contentJson` непорожній
+        (не просто порожній Tiptap-документ — та сама перевірка
+        "непорожньої статті", що вже `article && article.contentJson.
+        trim()` на сторінці уроку) АБО `assignment.videoUrl` заданий)
+        → рендерити `HomeworkAssignmentRenderer` (якщо є текст) і/або
+        `VideoPlayer` з `extractYoutubeId(assignment.videoUrl)` (якщо
+        є відео) над формою здачі;
+      - інакше (немає `assignment`, або є, але й текст порожній, і
+        відео не задане) → **"До цього уроку домашнього завдання
+        немає"** (текст користувача дослівно) замість опису завдання.
+      **Рішення, яке варто підтвердити з користувачем перед
+      реалізацією:** форма ЗДАЧІ відповіді студентом (нижче опису)
+      лишається доступною НАВІТЬ у порожньому стані — тобто "немає
+      опису завдання" не означає "не можна здати відео". Альтернатива
+      — ховати всю форму здачі теж, якщо адмін нічого не задав. Обрано
+      перший варіант (форма лишається) за замовчуванням, бо порожній
+      опис — це, найімовірніше, "адмін ще не встиг заповнити", а не
+      "цей урок точно без ДЗ", і ховання форми зробило б стан складно
+      зворотним для студентів, які вже почали урок.
+- [x] HW+.4.3 `app/courses/[slug]/lessons/[lessonId]/page.tsx` —
+      додати `getHomeworkAssignmentByLessonIdService(lessonId)` у вже
+      наявний `Promise.all` (поруч з `article`), передати результат
+      новим пропом `assignment` у `RealHomeworkBlock`.
+
+### HW+.5 Валідація/безпека
+
+- [x] HW+.5.1 Обидві мутуючі дії (`upsertHomeworkAssignmentAction`,
+      `uploadHomeworkImageAction`) — `assertAdmin()` на сервері, той
+      самий принцип "не тільки в UI" (`CLAUDE.md`), що вже в
+      `modules/articles/actions.ts`/`modules/lessons/actions.ts`.
+      Кнопки "Додати ДЗ"/маршрут `.../homework` і так недосяжні не-
+      адміну через наявний захист `/admin/*` (ADMIN+), це — другий,
+      незалежний рубіж на рівні самої дії.
+- [x] HW+.5.2 Завантаження зображення — та сама дешева
+      клієнтська перевірка (`accept=` на `<input>`, HW+.2.1) +
+      обов'язкова реальна серверна (`uploadService.ts`, HW+.0.4,
+      Sharp-перевірка вмісту через `processUploadedImage`, той самий
+      двошаровий підхід, що CERT+.1.3).
+- [x] HW+.5.3 `videoUrl` — `isYoutubeUrl` на сервері в `service.ts`
+      (HW+.1.3), той самий принцип "клієнтська валідація — зручність,
+      серверна — джерело правди", що скрізь у проєкті.
+
+**Рекомендований порядок реалізації:** HW+.0 (модель+сховище+ліміти,
+від них залежить усе інше) → HW+.1 (модуль, бекенд повністю) → HW+.2
+(апгрейд `TiptapEditor` реальним аплоадом — незалежний від HW+.3/4,
+можна паралельно з HW+.1) → HW+.3 (адмінський редактор + маршрут +
+кнопка в `LessonForm`) → HW+.4 (показ студенту, порожній стан) → HW+.5
+(наскрізна перевірка безпеки — по факту вже вбудована в HW+.1/HW+.2,
+цей пункт — фінальний чек-лист, а не окрема робота).
+
+**Відкрите питання про відео-провайдер — ВИРІШЕНО (28.08.2026, за прямим
+підтвердженням користувача): YouTube**, той самий підхід, що для ВСІХ
+інших відео в проєкті (той самий `VideoPlayer`/`isYoutubeUrl`, що вже
+використовується для `Lesson.videoUrl` і `HomeworkSubmission.videoUrl`
+— окремого провайдера/довільного хостингу НЕ додавали).
+
+**Статус: РЕАЛІЗОВАНО (HW+.0–HW+.5, 28.08.2026).** Деталі — розділ
+"ФАЗА HW+" у `IMPLEMENTATION_STATUS.md` (включно з результатами
+`eslint`/`tsc` у сендбоксі й рекомендацією прогнати `prisma generate`
+з мережею перед деплоєм).

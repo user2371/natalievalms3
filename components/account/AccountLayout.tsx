@@ -34,14 +34,28 @@ export function AccountLayout({
 }: AccountLayoutProps) {
   const { data: session, status } = useSession();
 
+  // За прямим проханням користувача: раніше сторінки, що передають `user`
+  // (`/profile`, `/my-learning`, `/settings`, `/homework`, `/certificates`
+  // — усі через цей `AccountLayout`), давали в `Header` лише
+  // `{ name, avatarUrl }` БЕЗ `role`. Через це `Header.tsx` (його власний
+  // `isAdmin = user?.role === "ADMIN"`) завжди бачив "не адмін" на цих
+  // сторінках — пункт "Панель адміністратора" в дропдауні зникав скрізь,
+  // крім головної (`/`, де `<Header />` рендериться без пропа й бере роль
+  // напряму з сесії). `role` тепер завжди підмішується з сесії — незалежно
+  // від того, що передала конкретна сторінка в `propUser`.
+  const sessionRole = (session?.user as { role?: string } | undefined)?.role;
+
   const user =
     propUser !== undefined
       ? propUser
+        ? { ...propUser, role: sessionRole }
+        : null
       : session?.user
         ? {
             name: session.user.name || "Користувач",
             avatarUrl:
               (session.user as { avatarUrl?: string }).avatarUrl || session.user.image,
+            role: sessionRole,
           }
         : null;
 

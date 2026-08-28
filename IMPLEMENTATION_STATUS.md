@@ -4492,3 +4492,96 @@ SVG-значок "M" (moderator) всюди, де показується йог�
 **Файли:** `public/defaultProfilePhoto.svg` (новий),
 `app/profile/page.tsx`, `app/users/[id]/page.tsx`,
 `app/settings/page.tsx`, `TASKS_DETAILED.md`, `IMPLEMENTATION_STATUS.md`.
+
+## ФАЗА HW+ — Домашнє завдання: адмінський контент уроку (28.08.2026, HW+.0–HW+.5 РЕАЛІЗОВАНО)
+
+За прямим проханням користувача: адмінський текстовий редактор ДЗ на
+урок (реальне завантаження зображень, не URL) + окреме поле відео-
+інструкції (лише URL) + порожній стан "До цього уроку домашнього
+завдання немає". Повний розбір на підзадачі — `TASKS_DETAILED.md`,
+розділ "ФАЗА HW+".
+
+**Відкрите питання про відео-провайдер — ВИРІШЕНО користувачем перед
+стартом реалізації:** YouTube, той самий підхід, що для ВСІХ інших
+відео в проєкті (`Lesson.videoUrl`, `HomeworkSubmission.videoUrl`).
+
+Реалізовано:
+- **HW+.0** — нова Prisma-модель `HomeworkAssignment` (`lessonId`
+  `@unique`, `contentJson`/`videoUrl` — обидва `String?`, окремо від
+  наявної `HomeworkSubmission` — та здача студента, ця — опис від
+  адміна), міграція
+  `prisma/migrations/20260828120000_homework_assignments/`; нове
+  сховище `lib/storage/homeworkImageStorage.ts` (Cloudinary, той самий
+  контракт-абстракція, що `certificateStorage.ts`, `maxDimension:
+  1600`); константи `HOMEWORK_IMAGE_ALLOWED_MIME_TYPES` (jpeg/png/webp)
+  і `HOMEWORK_IMAGE_MAX_SIZE_BYTES` (5MB) у `modules/
+  homeworkAssignments/schema.ts`.
+- **HW+.1** — новий модуль `modules/homeworkAssignments`
+  (schema/repository/service/uploadService/actions/index, той самий
+  поділ, що й решта модулів). `uploadService.ts` — ОКРЕМИЙ файл (той
+  самий обов'язковий поділ, що CERT+.1.6, щоб уникнути `Module not
+  found: Can't resolve 'fs'`), `index.ts` реекспортує `uploadService`
+  ЛИШЕ через `actions.ts`. `upsertHomeworkAssignmentService` —
+  `isYoutubeUrl`-перевірка `videoUrl` (той самий текст помилки, що
+  `modules/homework/service.ts`), порожні рядки нормалізуються в
+  `null`.
+- **HW+.2** — `TiptapEditor.tsx` отримав опційний проп `onUploadImage?:
+  (file: File) => Promise<string>`. Якщо передано — кнопка "Зображення"
+  відкриває прихований `<input type="file">`, показує стан
+  завантаження (`aria-busy`, ⏳ замість 🖼, кнопка `disabled` на час
+  запиту — HW+.2.2), при помилці — `window.alert` (той самий рівень
+  UX, що вже в `addLink`). Якщо НЕ передано — стара поведінка
+  (`window.prompt` за URL) без жодних змін; `AdminArticleEditor.tsx`
+  (статті) свідомо НЕ чіпається в цій фазі.
+- **HW+.3** — новий `components/admin/AdminHomeworkEditor.tsx` (1:1
+  структура `AdminArticleEditor.tsx`: перемикач Редагувати/Перегляд,
+  явна кнопка "Зберегти", `TiptapEditor` з реальним `onUploadImage`)
+  ПЛЮС поле "Посилання на відео-інструкцію (YouTube)". Новий маршрут
+  `/admin/courses/[courseId]/lessons/[lessonId]/homework`. `LessonForm`
+  отримав `homeworkHref`/`hasHomeworkAssignment` (блок "Домашнє
+  завдання до уроку" з кнопкою "Додати ДЗ"/"Редагувати ДЗ", той самий
+  принцип, що `articleHref`) — `hasHomeworkAssignment` рахується на
+  сервері (`app/admin/.../edit/page.tsx`) з реального
+  `HomeworkAssignment`, а не з незаповненого текстового поля форми (на
+  відміну від `articleText`, який у `AdminEditLessonForm` ніколи не
+  підставляється — існуючий, не наш, дрібний недолік напису кнопки
+  статті, не займали в цій фазі).
+- **HW+.4** — новий `components/lesson/HomeworkAssignmentRenderer.tsx`
+  (read-only, 1:1 з `ArticleRenderer.tsx`). `RealHomeworkBlock.tsx`:
+  статичний `DEFAULT_HOMEWORK_ITEMS`-чекліст прибрано; тепер рендерить
+  `VideoPlayer` (відео-інструкція) і/або `HomeworkAssignmentRenderer`
+  (текст), якщо є хоч одне з полів `HomeworkAssignment`; інакше —
+  "До цього уроку домашнього завдання немає". Форма ЗДАЧІ відповіді
+  студентом лишається доступною НАВІТЬ у порожньому стані (рішення з
+  плану, HW+.4.2 — не підтверджувалось окремо, обрано варіант
+  за замовчуванням з плану). `app/courses/[slug]/lessons/[lessonId]/
+  page.tsx` підвантажує `getHomeworkAssignmentByLessonIdService` поруч
+  з `article` у вже наявному `Promise.all`.
+- **HW+.5** — `assertAdmin()` на сервері в обох мутуючих діях (той самий
+  принцип "не тільки в UI", що `modules/articles/actions.ts`);
+  клієнтська `accept=` + серверна Sharp-перевірка вмісту
+  (`processUploadedImage`) для зображень; `isYoutubeUrl` на сервері для
+  `videoUrl`.
+
+**Перевірка:** `npm install` (успішно) — `npx prisma generate` НЕ зміг
+завантажити engine-бінарник (`binaries.prisma.sh` поза дозволеним
+мережевим списком сендбоксу, `403 Forbidden`) — той самий
+сендбоксовий блокер, що вже документувався раніше в цьому файлі (F.6–
+F.9, F.25 тощо), тож типи `@prisma/client` тут НЕ згенеровані. `npx
+eslint` по всіх нових/змінених файлах цієї фази — чисто (0
+помилок/попереджень; під час цього виявлено й виправлено власну
+помилку — випадково задубльований хвіст JSX у
+`RealHomeworkBlock.tsx` після одного з правок, зловлено саме
+`eslint`-парсингом). `npx tsc --noEmit` — 21 помилка, УСІ в
+попередньо існуючих файлах (`app/courses/page.tsx`, `app/page.tsx`,
+`app/sitemap.ts`, `modules/comments`, `modules/leaderboard`,
+`modules/lessons`, `modules/progress`, `modules/quizzes`) — той самий
+клас `TS7006` ("implicitly has an 'any' type") від параметрів callback,
+чиї типи виводяться з НЕзгенерованого `PrismaClient` — жодної нової
+помилки в жодному файлі цієї фази. **Рекомендація — прогнати `npm
+install && npx prisma generate && npx tsc --noEmit && npx eslint .
+--max-warnings=0` у своєму середовищі з мережею** (насамперед
+переконатись, що `prisma generate` реально підхопив нову модель
+`HomeworkAssignment`, і застосувати міграцію
+`20260828120000_homework_assignments` до бази).
+
