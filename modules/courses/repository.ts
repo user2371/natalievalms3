@@ -53,6 +53,8 @@ export interface CreateCourseData {
   masterName?: string | null;
   masterBio?: string | null;
   masterAvatarUrl?: string | null;
+  introTitle?: string | null;
+  introHighlights?: string[];
 }
 
 export async function createCourse(data: CreateCourseData) {
@@ -69,6 +71,8 @@ export async function createCourse(data: CreateCourseData) {
       masterName: data.masterName ?? null,
       masterBio: data.masterBio ?? null,
       masterAvatarUrl: data.masterAvatarUrl ?? null,
+      introTitle: data.introTitle ?? null,
+      introHighlights: data.introHighlights ?? [],
     },
   });
 }
@@ -83,6 +87,8 @@ export interface UpdateCourseData {
   masterName?: string | null;
   masterBio?: string | null;
   masterAvatarUrl?: string | null;
+  introTitle?: string | null;
+  introHighlights?: string[];
 }
 
 export async function updateCourse(id: string, data: UpdateCourseData) {

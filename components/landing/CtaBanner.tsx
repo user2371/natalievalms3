@@ -3,13 +3,16 @@
 import { useRouter } from "next/navigation";
 import { GiftIcon, ArrowRightIcon } from "@/components/ui/icons";
 import { LESSONS } from "@/lib/data/lessons";
-import { useFeaturedCourse } from "@/lib/progress/useFeaturedCourse";
 import type { Course as RealCourse } from "@/modules/courses";
 import type { Lesson as RealLesson } from "@/modules/lessons";
 
 export interface CtaBannerProps {
-  /** Реальні (Prisma) курси — той самий проп, що вже передається в `HeroSection`/`ProgramSection` з `app/page.tsx` (задача 3.11). */
-  realCourses?: RealCourse[];
+  /**
+   * Featured-курс, вибраний адміном (`modules/siteSettings`, ФАЗА
+   * HOME+) — той самий проп, що вже передається в `HeroSection`/
+   * `ProgramSection` з `app/page.tsx`.
+   */
+  featuredCourse?: RealCourse | null;
   /** Уроки кожного реального курсу (за `courseId`), той самий проп, що вже в `HeroSection`/`ProgramSection`. */
   realLessonsByCourseId?: Record<string, RealLesson[]>;
 }
@@ -20,28 +23,28 @@ export interface CtaBannerProps {
  * коментарями/статтею/квізом"): кнопка й лічильник уроків раніше ЗАВЖДИ
  * були захардкоджені на `LESSONS` (`lib/data/lessons.ts`, легасі демо-курс)
  * — той самий баг, що на `HeroSection` (виправлено там же, той самий фікс,
- * той самий принцип). Тепер: якщо є реальний курс, що збігається з
- * `featuredCourse` (адмін-вибір, `useFeaturedCourse`) за `slug`, і в нього
+ * той самий принцип). Тепер: якщо є `featuredCourse` (ФАЗА HOME+, замінив
+ * колишній клієнтський `useFeaturedCourse` + пошук за `slug`) і в нього
  * є хоча б один реальний урок — і кнопка, і лічильник "Доступ до всіх N
- * уроків" беруть РЕАЛЬНІ дані (`realCourse`/`realLessonsByCourseId`);
- * інакше — той самий фолбек на легасі демо-курс, що й раніше (щоб банер не
- * зламався, коли реального курсу з уроками ще немає взагалі).
+ * уроків" беруть РЕАЛЬНІ дані; інакше — той самий фолбек на легасі
+ * демо-курс, що й раніше (щоб банер не зламався, коли featured-курсу з
+ * уроками ще немає взагалі).
  */
 export function CtaBanner({
-  realCourses = [],
+  featuredCourse = null,
   realLessonsByCourseId = {},
 }: CtaBannerProps) {
   const router = useRouter();
-  const { featuredCourse } = useFeaturedCourse();
 
-  const realCourse = realCourses.find((course) => course.slug === featuredCourse.slug);
-  const realLessons = realCourse ? (realLessonsByCourseId[realCourse.id] ?? []) : [];
+  const realLessons = featuredCourse
+    ? (realLessonsByCourseId[featuredCourse.id] ?? [])
+    : [];
   const firstLesson = realLessons[0];
-  const lessonsCount = realCourse ? realLessons.length : LESSONS.length;
+  const lessonsCount = featuredCourse ? realLessons.length : LESSONS.length;
 
   function handleClick() {
-    if (realCourse && firstLesson) {
-      router.push(`/courses/${realCourse.slug}/lessons/${firstLesson.id}`);
+    if (featuredCourse && firstLesson) {
+      router.push(`/courses/${featuredCourse.slug}/lessons/${firstLesson.id}`);
     } else {
       router.push(`/lessons/${LESSONS[0].slug}`);
     }

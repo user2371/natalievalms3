@@ -45,6 +45,10 @@ export const CreateCourseSchema = z.object({
   masterName: z.string().trim().min(1).optional().nullable(),
   masterBio: z.string().trim().min(1).optional().nullable(),
   masterAvatarUrl: z.string().trim().url("Некоректний URL аватара").optional().nullable(),
+  // Заголовок і пункти-переваги секції "Про курс" на лендінгу (задача
+  // HOME+.2.1) — доповнюють `introVideoUrl`/`introDescription` вище.
+  introTitle: z.string().trim().min(1).optional().nullable(),
+  introHighlights: z.array(z.string().trim().min(1)).optional(),
 });
 
 export const UpdateCourseSchema = CreateCourseSchema.partial().extend({
@@ -67,6 +71,8 @@ export interface Course {
   masterName: string | null;
   masterBio: string | null;
   masterAvatarUrl: string | null;
+  introTitle: string | null;
+  introHighlights: string[];
   createdAt: Date;
   updatedAt: Date;
 }

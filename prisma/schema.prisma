@@ -79,12 +79,31 @@ model Course {
   masterName       String?
   masterBio        String?
   masterAvatarUrl  String?
+  // Заголовок і пункти-переваги секції "Про курс" на лендінгу (задача
+  // HOME+.0.2) — доповнюють уже наявні `introVideoUrl`/`introDescription`.
+  // `introHighlights` — Postgres-масив рядків, редагується єдиним блоком
+  // в адмінці (`CourseForm`), без окремої таблиці.
+  introTitle       String?
+  introHighlights  String[] @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   lessons     Lesson[]
   enrollments Enrollment[]
   certificates Certificate[]
+  featuredBy   SiteSettings?
+}
+
+// Сайтові налаштування — однорядкова (singleton) таблиця (задача
+// HOME+.0.1). Наразі містить лише вибір "курсу на головній сторінці"
+// (featured course, задача 0.20/HOME+), реальне server-side збереження
+// замість попереднього `localStorage`-proof-of-concept
+// (`lib/progress/localFeaturedCourse.ts`, прибрано в HOME+.7).
+model SiteSettings {
+  id               String   @id @default("singleton")
+  featuredCourseId String?  @unique
+  featuredCourse   Course?  @relation(fields: [featuredCourseId], references: [id], onDelete: SetNull)
+  updatedAt        DateTime @updatedAt
 }
 
 model Lesson {

@@ -3,7 +3,6 @@ import progressReducer from "@/lib/store/slices/progressSlice";
 import homeworkReducer from "@/lib/store/slices/homeworkSlice";
 import commentsReducer from "@/lib/store/slices/commentsSlice";
 import settingsReducer from "@/lib/store/slices/settingsSlice";
-import featuredCourseReducer from "@/lib/store/slices/featuredCourseSlice";
 import authModalReducer from "@/lib/store/slices/authModalSlice";
 import progressSyncToastReducer from "@/lib/store/slices/progressSyncToastSlice";
 
@@ -14,8 +13,16 @@ import progressSyncToastReducer from "@/lib/store/slices/progressSyncToastSlice"
  * `localStorage` через набір самописних `useState`-хуків
  * (`lib/progress/useLocal*.ts`) і в React Context (`AuthModalContext`):
  * прогрес гостя, здані ДЗ, коментарі/реакції, налаштування видимості ДЗ,
- * вибір "рекомендованого" курсу адміном, стан модалки авторизації, тост
- * Progress-sync при логіні (Фаза 7).
+ * стан модалки авторизації, тост Progress-sync при логіні (Фаза 7).
+ *
+ * ФАЗА HOME+ (29.08.2026): `featuredCourse`-slice ВИДАЛЕНО — вибір "курсу
+ * на головній" (задача 0.20) тепер зберігається на сервері
+ * (`modules/siteSettings`, `SiteSettings.featuredCourseId`), а не в
+ * `localStorage`/Redux-кеші одного браузера (колишній
+ * `lib/progress/localFeaturedCourse.ts`/`useFeaturedCourse.ts`, обидва
+ * прибрані). `app/page.tsx` (Server Component) вантажить featured-курс
+ * напряму й передає готовим пропом секціям лендінгу — жодного
+ * крос-компонентного клієнтського стану для цього більше не потрібно.
  *
  * Суто локальний UI-стан окремих компонентів (значення полів форми,
  * відкритий/закритий dropdown, `loading` на кнопці) НАВМИСНО лишається на
@@ -36,7 +43,6 @@ export const store = configureStore({
     homework: homeworkReducer,
     comments: commentsReducer,
     settings: settingsReducer,
-    featuredCourse: featuredCourseReducer,
     authModal: authModalReducer,
     progressSyncToast: progressSyncToastReducer,
   },

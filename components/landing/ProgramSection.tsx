@@ -1,5 +1,3 @@
-"use client";
-
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -7,36 +5,42 @@ import { LessonCard } from "@/components/lesson/LessonCard";
 import { RealLessonCard } from "@/components/lesson/RealLessonCard";
 import { ArrowRightIcon } from "@/components/ui/icons";
 import { LESSONS } from "@/lib/data/lessons";
-import { useFeaturedCourse } from "@/lib/progress/useFeaturedCourse";
 import type { Course as RealCourse } from "@/modules/courses";
 import type { Lesson as RealLesson } from "@/modules/lessons";
 
 export interface ProgramSectionProps {
   /**
-   * Реальні (Prisma) курси + їхні уроки з БД — передаються з `app/page.tsx`
-   * (Server Component), той самий проп `realCourses`, що й у `HeroSection`/
-   * `MasterSection`, плюс мапа `courseId → Lesson[]` (задача 3.12). Секція
-   * "містить" вибраний адміном статичний курс (`useFeaturedCourse`) з
-   * реальним DB-курсом за `slug`: якщо є збіг І в реального курсу є хоч
-   * один реальний урок — рендериться `RealLessonCard` замість статичних
-   * `LESSONS`. Порожній/відсутній результат (БД недоступна) не ламає
-   * секцію — просто лишається статичний фолбек, як і був.
+   * Featured-курс, вибраний адміном (`modules/siteSettings`, ФАЗА
+   * HOME+) — вантажиться на сервері в `app/page.tsx` і передається
+   * сюди готовим, разом з мапою `courseId → Lesson[]` (задача 3.12).
+   * `null` — немає featured-курсу (ще не обрано / знято з публікації /
+   * видалено), секція лишається на статичному фолбеку `LESSONS`.
+   *
+   * ДО ФАЗИ HOME+ секція сама шукала відповідний реальний курс за
+   * `slug` серед `realCourses` (задокументована проблема 0.20.1) —
+   * тепер це робить `app/page.tsx`, тут лише готовий об'єкт.
    */
-  realCourses?: RealCourse[];
+  featuredCourse?: RealCourse | null;
   realLessonsByCourseId?: Record<string, RealLesson[]>;
 }
 
+/**
+ * Секцію переведено назад на Server Component (задача HOME+.6.2) —
+ * єдиною причиною `"use client"` тут раніше був клієнтський хук
+ * `useFeaturedCourse`; після переходу на серверний `featuredCourse`-проп
+ * клієнтських хуків у секції більше немає.
+ */
 export function ProgramSection({
-  realCourses = [],
+  featuredCourse = null,
   realLessonsByCourseId = {},
 }: ProgramSectionProps) {
-  const { featuredCourse } = useFeaturedCourse();
-  const realCourse = realCourses.find((course) => course.slug === featuredCourse.slug);
-  const realLessons = realCourse ? (realLessonsByCourseId[realCourse.id] ?? []) : [];
-  const usingRealLessons = realCourse !== undefined && realLessons.length > 0;
+  const realLessons = featuredCourse
+    ? (realLessonsByCourseId[featuredCourse.id] ?? [])
+    : [];
+  const usingRealLessons = featuredCourse !== null && realLessons.length > 0;
 
   const lessonsCount = usingRealLessons ? realLessons.length : LESSONS.length;
-  const allLessonsHref = usingRealLessons ? `/courses/${realCourse!.slug}` : "/lessons";
+  const allLessonsHref = usingRealLessons ? `/courses/${featuredCourse!.slug}` : "/lessons";
 
   return (
     <section id="program" className="relative py-16 sm:py-20">
@@ -62,7 +66,7 @@ export function ProgramSection({
                   <RealLessonCard
                     key={lesson.id}
                     lesson={lesson}
-                    courseSlug={realCourse!.slug}
+                    courseSlug={featuredCourse!.slug}
                     className="w-full"
                   />
                 ))

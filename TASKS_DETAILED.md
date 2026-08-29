@@ -5747,3 +5747,426 @@ Sharp-пайплайн (`lib/images/processUploadedImage.ts`) готовий д�
 engine-бінарників, той самий відомий бар'єр сендбокса, що й у
 попередніх фазах; рекомендація та сама — прогнати повний
 `tsc`/`eslint`/`prisma generate` локально або в CI перед деплоєм).
+
+## ФАЗА HOME+ — Реальний "курс на головній" (featured course) (29.08.2026,
+ПЛАН → HOME+.0–HOME+.7 РЕАЛІЗОВАНО 29.08.2026, HOME+.8 (QA/крайні
+випадки) — ще план)
+
+**Проблема (описана користувачем):** в адмінці (`/admin/courses`) є блок
+"Курс на головній сторінці" (`FeaturedCoursePicker`), але вибір у ньому
+**нічого не змінює** на реальному сайті. Потрібно, щоб адмін міг обрати
+ОДИН із кількох реальних курсів як "featured", і щоб на головній сторінці
+автоматично підтягнулись дані саме цього курсу: кількість уроків у секції
+"Програма курсу", текст у hero-секції, текст у секції "Про курс" — і щоб
+усі ці тексти можна було редагувати в адмінці.
+
+**Корінна причина (знайдена аудитом коду):**
+
+- Вибір featured-курсу (задача 0.20) зберігається лише в
+  `localStorage` браузера (`lib/progress/localFeaturedCourse.ts`) +
+  Redux-кеш поверх нього (`lib/store/slices/featuredCourseSlice.ts`,
+  хук `lib/progress/useFeaturedCourse.ts`) — це **клієнтський,
+  прив'язаний до конкретного браузера** стан, а не сайтове налаштування
+  на бекенді. Те, що вибирає адмін у своєму браузері, ніхто інший
+  (звичайний відвідувач, адмін в іншому браузері) не бачить — сам
+  докстрінг `localFeaturedCourse.ts` вже чесно документує це як
+  "proof-of-concept на клієнті" з приміткою "реальне збереження на
+  бекенді (`Setting`/`SiteConfig` в Prisma) — Фаза 3+/8", яка так і не
+  настала.
+- `FeaturedCoursePicker` дає вибір лише серед **шести статичних
+  макетних курсів** з `lib/data/courses.ts` (`COURSES`) — того самого
+  демо-каталогу, що й на `/courses` до підключення реальних даних, а
+  НЕ серед реальних курсів `modules/courses` (Prisma, `Course`). На
+  сьогодні на сайті фактично лише один реальний курс
+  (`gel-lak-dlya-novachkiv`), тож вибір інших пунктів у дропдауні
+  показує на лендінгу статичний плейсхолдер-текст, який ніде не
+  редагується.
+- Кожна секція лендінгу (`HeroSection`, `ProgramSection`,
+  `MasterSection`, `CtaBanner`) окремо й по-різному намагається
+  "змістити" вибраний статичний курс із реальним курсом БД за
+  збігом `slug` (`realCourses.find((c) => c.slug === featuredCourse.slug)`)
+  — крихка, дубльована в 4 місцях логіка. `IntroSection` ("Про курс")
+  такого змістовування не робить ВЗАГАЛІ — секція на 100% статична
+  (`INTRO_LESSON` з `lib/data/lessons.ts`), і жодних даних із вибраного
+  курсу туди не потрапляє, попри те що в самому файлі вже є коментар,
+  що документує намір: `// Текст нижче відповідає майбутнім
+  редагованим полям курсу (Course.introTitle / Course.introDescription
+  / Course.introHighlights — Фаза 8.1).` — саме ці поля потрібні.
+- У моделі `Course` (Prisma) вже є `description`, `introVideoUrl`,
+  `introDescription` — і `CourseForm.tsx` в адмінці вже дає їх
+  редагувати ("Опис", "Про курс (вступний текст)", "Трейлер (вступне
+  відео)"). Не вистачає лише `introTitle` (заголовок секції "Про
+  курс") і `introHighlights` (список пунктів-переваг під описом) —
+  обидва зараз захардкоджені константи в `IntroSection.tsx`.
+- Через відсутність центрального бекенд-стану `app/page.tsx` (лендінг)
+  і сам не має способу дізнатись "який курс featured" на сервері —
+  весь вибір читається на клієнті (`useFeaturedCourse`), тому
+  секції лендінгу змушені бути `"use client"` лише заради цього.
+
+**Рішення (загальна схема, без реалізації):**
+
+1. Featured-курс — нове **сайтове** налаштування в БД (не
+   `localStorage`), що зберігає `id` реального курсу.
+2. Пікер в адмінці показує список **реальних** курсів (`modules/courses`),
+   а не статичний демо-каталог.
+3. Лендінг (`app/page.tsx`, Server Component) сам вантажить featured-курс
+   на сервері (як уже вантажить `realCourses`) і передає готовий об'єкт
+   курсу секціям — секції перестають самі "змістовувати" щось за `slug`.
+4. Дані секцій "Hero" / "Програма курсу" / "Про курс" — усі беруться з
+   ОДНОГО реального featured-курсу: `description` (hero), кількість
+   реальних уроків курсу (програма), `introTitle`/`introDescription`/
+   `introVideoUrl`/`introHighlights` ("Про курс").
+5. Усі перелічені текстові поля — редагуються в `CourseForm.tsx`
+   (адмінка), тим самим самим механізмом, що вже редагує
+   `description`/`introDescription`/`introVideoUrl`.
+6. Якщо featured-курс ще не обраний, обраний курс видалено/знято з
+   публікації, або на сайті взагалі немає жодного реального
+   опублікованого курсу — лендінг падає назад на існуючий статичний
+   демо-контент (той самий фолбек-принцип, що вже прийнятий у проєкті
+   для "БД недоступна").
+
+---
+
+### HOME+.0 Схема БД (Prisma)
+
+- [x] HOME+.0.1 Нова модель `SiteSettings` (singleton-рядок) у
+      `prisma/schema.prisma`:
+      ```
+      model SiteSettings {
+        id               String   @id @default("singleton")
+        featuredCourseId String?  @unique
+        featuredCourse   Course?  @relation(fields: [featuredCourseId], references: [id], onDelete: SetNull)
+        updatedAt        DateTime @updatedAt
+      }
+      ```
+      `onDelete: SetNull` — видалення обраного курсу НЕ повинно валити
+      сайт: `featuredCourseId` просто обнуляється, лендінг падає на
+      фолбек (той самий принцип, що вже прийнятий для `Course.coverImage`
+      тощо). Один рядок із фіксованим `id` ("singleton") — той самий
+      підхід, що найпростіше гарантує "лише один featured-курс одразу",
+      без окремої таблиці історії чи мультивибору (наразі не потрібен).
+- [x] HOME+.0.2 Два нових поля в моделі `Course`:
+      - `introTitle       String?` — заголовок секції "Про курс".
+      - `introHighlights  String[] @default([])` — список пунктів-переваг
+        під описом (Postgres-масив рядків, той самий тип, що вже
+        природно підтримує Prisma/Postgres — окремої таблиці не
+        потрібно, список короткий і завжди редагується єдиним блоком).
+- [x] HOME+.0.3 Міграція `prisma/migrations/<timestamp>_site_settings_featured_course/migration.sql`
+      (за датою сесії) — `CREATE TABLE "SiteSettings"` + `ALTER TABLE
+      "Course" ADD COLUMN "introTitle" TEXT, ADD COLUMN "introHighlights"
+      TEXT[] NOT NULL DEFAULT '{}'`. Той самий підхід до ручного
+      написання SQL-міграції, що вже в попередніх фазах проєкту (папка
+      `prisma/migrations/*/migration.sql` пишеться вручну, а не лише
+      генерується CLI, — сендбокс без мережі до Prisma engine не дає
+      прогнати `prisma migrate dev`).
+
+### HOME+.1 Новий модуль `modules/siteSettings`
+
+Той самий поділ `schema.ts → repository.ts → service.ts → actions.ts →
+index.ts`, що і в решті модулів проєкту (`CLAUDE.md`).
+
+- [x] HOME+.1.1 `schema.ts` — інтерфейс `SiteSettings { featuredCourseId:
+      string | null }`, `SetFeaturedCourseSchema = z.object({ courseId:
+      z.string().min(1) })`.
+- [x] HOME+.1.2 `repository.ts`:
+      - `getSiteSettings()` — `prisma.siteSettings.findUnique({ where: {
+        id: "singleton" } })`, повертає `null`, якщо рядка ще нема
+        (перший запуск сайту, ніхто ще нічого не вибирав).
+      - `upsertFeaturedCourseId(courseId: string | null)` —
+        `prisma.siteSettings.upsert({ where: { id: "singleton" }, create:
+        { id: "singleton", featuredCourseId: courseId }, update: {
+        featuredCourseId: courseId } })` — `upsert`, бо рядка
+        налаштувань може ще не існувати при першому виборі.
+- [x] HOME+.1.3 `service.ts`:
+      - `getFeaturedCourseService(): Promise<Course | null>` — читає
+        `SiteSettings.featuredCourseId`, тягне курс через
+        `modules/courses` (`findById`-рівень репозиторію курсів, або
+        прямий Prisma-запит із `include`, — вирішити на етапі
+        реалізації, щоб не плодити циклічний імпорт `modules/courses ↔
+        modules/siteSettings`; найпростіше — `siteSettings/repository.ts`
+        сам робить `prisma.course.findUnique` за `featuredCourseId`,
+        не імпортуючи `modules/courses`). Повертає `null`, якщо
+        налаштування не задане, курс видалено, або курс
+        **не опублікований** (`published: false` — featured-курс, знятий
+        з публікації, не повинен лишатись видимим на лендінгу).
+      - `setFeaturedCourseService(courseId: string)` — перевіряє, що
+        курс існує І опублікований (`CreateCourseSchema`-рівня валідація
+        тут не потрібна, лише проста перевірка існування — сама вибірка
+        курсів у пікері адмінки вже буде обмежена опублікованими, див.
+        HOME+.3, це друга лінія захисту на сервері), потім
+        `repository.upsertFeaturedCourseId(courseId)`.
+      - `clearFeaturedCourseService()` — `upsertFeaturedCourseId(null)`,
+        опція "Не показувати жоден курс" / "Скинути вибір" у пікері
+        (див. HOME+.3.2).
+- [x] HOME+.1.4 `actions.ts` — `"use server"`, той самий `assertAdmin()`
+      патерн, що в `modules/courses/actions.ts`/`modules/quizzes/actions.ts`
+      (мутація — лише роль `ADMIN`, перевірка й тут, не лише в UI):
+      - `setFeaturedCourseAction(courseId: string)` — `assertAdmin()` →
+        `service.setFeaturedCourseService(courseId)` →
+        `revalidatePath("/")` (див. HOME+.8.1, чому це критично) →
+        `revalidatePath("/admin/courses")` → `{ success, error }`, той
+        самий контракт повернення, що в інших `*Action` проєкту.
+      - `clearFeaturedCourseAction()` — дзеркально, для опції "скинути".
+      - `getFeaturedCourseAction()` — публічна (без `assertAdmin`,
+        читання не приватне) обгортка над `getFeaturedCourseService` —
+        придатна і для серверного виклику з `app/page.tsx`, і про
+        всяк випадок для майбутнього клієнтського споживача, якщо
+        з'явиться.
+- [x] HOME+.1.5 `index.ts` — публічний реекспорт (`setFeaturedCourseAction`,
+      `clearFeaturedCourseAction`, `getFeaturedCourseAction`,
+      `getFeaturedCourseService`), той самий принцип "інші модулі й
+      `app/**` імпортують тільки звідси".
+
+### HOME+.2 Розширення `modules/courses` полями `introTitle`/`introHighlights`
+
+- [x] HOME+.2.1 `schema.ts`: додати в `CreateCourseSchema`/`Course`-інтерфейс
+      `introTitle: z.string().trim().min(1).optional().nullable()` і
+      `introHighlights: z.array(z.string().trim().min(1)).optional()`
+      (за замовчуванням `[]`, той самий підхід, що вже для
+      `masterName`/`masterBio` — усі опційні, щоб курс без заповнених
+      полів не ламав валідацію).
+- [x] HOME+.2.2 `repository.ts`: `introTitle`/`introHighlights` — у
+      `mapCourse`/`create`/`update`, той самий принцип прямого
+      passthrough полів, що вже для `introVideoUrl`/`introDescription`.
+- [x] HOME+.2.3 `service.ts`: жодної додаткової бізнес-логіки не
+      потрібно — поля проходять як є (той самий рівень, що
+      `masterBio`).
+- [x] HOME+.2.4 `actions.ts`: `readCourseFormFields` — додати
+      `introTitle: getString("introTitle") || null`, і окремий парсинг
+      `introHighlights` з `FormData` (масив рядків через кілька полів
+      `formData.getAll("introHighlights")` — той самий підхід, що
+      `CourseForm` збиратиме кілька `<input>` з однаковим `name`, або
+      альтернатива — один прихований `<input>` з JSON-рядком; вирішити
+      на етапі реалізації залежно від того, як HOME+.4.2 реалізує
+      UI-редактор списку).
+
+### HOME+.3 Адмінка: реальний пікер featured-курсу
+
+- [x] HOME+.3.1 `app/admin/courses/page.tsx` — окрім уже наявного
+      `listCoursesService()` (усі курси, включно з чернетками),
+      додатково завантажити `getFeaturedCourseAction()` (поточний
+      featured-курс) і передати обидва в `FeaturedCoursePicker` як
+      пропси (`courses`, `featuredCourseId`). Список для ВИБОРУ в
+      пікері — лише **опубліковані** курси (`courses.filter(c =>
+      c.published)`) — так само, як публічний `/courses` показує лише
+      опубліковані, вибір неопублікованого курсу featured'ом не мав би
+      сенсу (він і так не покажеться реальним відвідувачам, лендінг
+      про це вже подбає фолбеком, але не давати вибрати такий курс у
+      пікері — простіше й чесніше для адміна).
+- [x] HOME+.3.2 `components/admin/FeaturedCoursePicker.tsx` — повністю
+      переписати:
+      - Пропси `{ courses: Course[]; featuredCourseId: string | null }`
+        (реальні `modules/courses`, а не `lib/data/courses.ts`).
+      - `<Select>` з опціями = `courses.map(c => ({ value: c.id, label:
+        c.title }))`, плюс окрема опція "Не показувати жоден курс"
+        (`value: ""`) — на випадок якщо адмін хоче тимчасово повернути
+        лендінг на статичний демо-фолбек.
+      - На `onChange` — виклик `setFeaturedCourseAction(courseId)` (або
+        `clearFeaturedCourseAction()` для порожнього вибору), той самий
+        `pending`/`error`-патерн, що вже в `AdminCoursesTable`
+        (перемикач "Опубліковано") — оптимістичне оновлення локального
+        `useState` + відкат при помилці сервера.
+      - Прибрати імпорт `COURSES`/`useFeaturedCourse` повністю.
+      - Текст підказки під заголовком блоку оновити: замість "Цей курс
+        показується в hero-блоці лендінгу — опис, кількість уроків і
+        кнопка..." — додати згадку і про секцію "Про курс" (щоб адмін
+        розумів весь обсяг впливу вибору).
+
+### HOME+.4 Адмінка: редагування `introTitle`/`introHighlights` у формі курсу
+
+- [x] HOME+.4.1 `components/admin/CourseForm.tsx`:
+      - `CourseFormValues` — додати `introTitle: string` і
+        `introHighlights: string[]`, `EMPTY` — `introTitle: ""`,
+        `introHighlights: []`.
+      - Нове текстове поле `Input` "Заголовок секції «Про курс»" (над
+        уже наявним `RichTextPlaceholder` "Про курс (вступний текст)"
+        — заголовок логічно йде перед описом).
+      - Новий блок-редактор списку `introHighlights`: рядок `Input` на
+        кожен пункт + кнопка "Прибрати" (іконка `CloseIcon`, той самий
+        візуальний патерн, що вже для видалення обкладинки) + кнопка
+        "+ Додати пункт" знизу списку (той самий підхід, що вже
+        застосований у проєкті для динамічних списків — звірити з
+        `AdminQuizQuestionsList.tsx`/`QuestionForm.tsx`, де вже є
+        додавання/видалення варіантів відповіді, щоб не винаходити
+        новий візуальний патерн для, по суті, тієї самої задачі
+        "редагований список рядків").
+      - `handleSubmit` — `formData.append("introTitle", values.introTitle)`
+        + для кожного пункту `formData.append("introHighlights",
+        item)` (кілька полів з однаковим іменем — `FormData` це
+        підтримує нативно, на сервері читається через
+        `formData.getAll("introHighlights")`, порожні/пробільні рядки
+        відфільтровуються перед відправкою).
+- [x] HOME+.4.2 `components/admin/AdminEditCourseForm.tsx` — `initial`
+      доповнити `introTitle: course.introTitle ?? ""`,
+      `introHighlights: course.introHighlights ?? []`.
+- [x] HOME+.4.3 `app/admin/courses/new/page.tsx`/`AdminCourseForm` (створення
+      нового курсу) — перевірити, що новий курс і без заповнених
+      `introTitle`/`introHighlights` створюється коректно (обидва
+      поля опційні/з дефолтом, форма для СТВОРЕННЯ не зобов'язана їх
+      заповнювати одразу).
+
+### HOME+.5 Лендінг: сервер вантажить featured-курс замість клієнтського вибору
+
+- [x] HOME+.5.1 `app/page.tsx` — поруч із наявним `listCoursesService(true)`
+      додати `const featuredCourse = await
+      getFeaturedCourseAction().catch(() => null)` (той самий
+      `.catch(() => ...)`-принцип "БД недоступна не валить лендінг",
+      що вже для `realCourses`). Прибрати ідею "секції самі
+      знаходять featured курс за slug" — тепер `app/page.tsx` передає
+      ГОТОВИЙ `featuredCourse: Course | null` напряму в кожну секцію
+      разом із уже наявними `realCourses`/`realLessonsByCourseId`
+      (останні лишаються — потрібні там, де показуються уроки самого
+      курсу, наприклад перші 4 картки в `ProgramSection`).
+- [x] HOME+.5.2 Додати `export const dynamic = "force-dynamic"` в
+      `app/page.tsx` (зараз цього немає — на відміну від `/courses` і
+      `/admin/courses`, де вже є). **Критично для цієї задачі:** без
+      цього Next.js може закешувати/пререндерити головну сторінку один
+      раз при білді, і зміна featured-курсу адміном НЕ з'явиться на
+      сайті без повного редеплою — та сама причина, чому зараз
+      `revalidatePath("/")` у HOME+.1.4 сам собою недостатній без
+      цього прапорця (детальніше — HOME+.8.1).
+
+### HOME+.6 Лендінг: секції читають готовий `featuredCourse`-проп
+
+- [x] HOME+.6.1 `HeroSection.tsx`:
+      - Проп `featuredCourse?: RealCourse | null` замість виклику
+        `useFeaturedCourse()` всередині.
+      - `description = featuredCourse?.description ?? <поточний
+        статичний фолбек-опис>` (статичний текст лишається як
+        фолбек-константа в самому файлі — той самий принцип, що вже
+        `FALLBACK_NAME`/`FALLBACK_BIO` у `MasterSection.tsx`).
+      - Лічильник уроків у `features` — `realLessonsByCourseId[featuredCourse.id]?.length`
+        замість поточного (**бага**, знайденого під час аудиту:) статичного
+        `featuredCourse.lessonsCount` зі старого типу — лічильник у
+        hero ЗАРАЗ не оновлюється реальною кількістю уроків курсу
+        взагалі, показує захардкоджене число зі статичних даних
+        незалежно від вибору; це виправляється тут же заодно.
+      - CTA-кнопка "Почати навчання" — та сама логіка з
+        `realCourse`/`firstLesson`, що вже є, лише `realCourse` тепер
+        просто `= featuredCourse` (без пошуку за `slug`).
+      - Компонент можна лишити `"use client"` (через `useRouter` у
+        `handleCtaClick`) — сама причина клієнтськості вже не
+        `useFeaturedCourse`, а роутінг, це нормально.
+- [x] HOME+.6.2 `ProgramSection.tsx`:
+      - Проп `featuredCourse?: RealCourse | null` замість
+        `useFeaturedCourse()`.
+      - `realLessons = featuredCourse ? realLessonsByCourseId[featuredCourse.id]
+        ?? [] : []`, `usingRealLessons = featuredCourse !== null &&
+        realLessons.length > 0` — решта логіки рендеру карток без змін.
+      - Секція більше не потребує `"use client"` **сама по собі** —
+        перевірити, чи всередині є ще клієнтські хуки (наразі, схоже,
+        немає) — якщо ні, перевести на Server Component (менше JS на
+        клієнті, той самий напрямок, що вже проєкт узяв для
+        `app/page.tsx`/`app/courses/page.tsx`).
+- [x] HOME+.6.3 `IntroSection.tsx` ("Про курс") — головна частина
+      задачі користувача, зараз секція взагалі нічого не читає:
+      - Проп `featuredCourse?: RealCourse | null`.
+      - `title = featuredCourse?.introTitle || INTRO_LESSON.title`
+        (фолбек-константа).
+      - `description = featuredCourse?.introDescription ||
+        <поточний статичний абзац>` (перенести поточний захардкоджений
+        абзац у fallback-константу).
+      - `highlights = featuredCourse?.introHighlights?.length ?
+        featuredCourse.introHighlights : PROGRAM_HIGHLIGHTS` (поточний
+        статичний список — фолбек).
+      - Відео — `featuredCourse?.introVideoUrl` (через `extractYoutubeId`,
+        той самий helper, що вже використовується в `HomeworkAssignment`/
+        `RealHomeworkBlock`) з фолбеком на `INTRO_LESSON.youtubeId`, якщо
+        в курсу немає власного трейлера.
+      - Прибрати коментар-нагадування "Текст нижче відповідає майбутнім
+        редагованим полям курсу... Фаза 8.1" — саме цю фазу й закриває
+        ФАЗА HOME+.
+- [x] HOME+.6.4 `MasterSection.tsx` — замінити внутрішній
+      `useFeaturedCourse()` + пошук за `slug` на проп `featuredCourse?:
+      RealCourse | null`, що приходить іззовні (`realCourse =
+      featuredCourse`) — сама логіка вибору `masterName`/`masterBio`/
+      `masterAvatarUrl` з фолбеком НЕ змінюється, лише джерело
+      `featuredCourse` тепер зовнішній проп, а не хук. _(Не входило в
+      явний перелік користувача, але секція споживає той самий
+      featured-курс і той самий `useFeaturedCourse`, який прибирається
+      в HOME+.7 — без цього кроку `MasterSection` лишиться зі
+      зламаним імпортом.)_
+- [x] HOME+.6.5 `CtaBanner.tsx` — та сама заміна `useFeaturedCourse()`
+      → проп `featuredCourse`, той самий підхід, що HOME+.6.1
+      (лічильник уроків + кнопка "Почати навчання").
+- [x] HOME+.6.6 `app/page.tsx` — прокинути `featuredCourse` у виклики
+      всіх п'яти секцій (`HeroSection`, `ProgramSection`, `IntroSection`,
+      `MasterSection`, `CtaBanner`) поруч із уже наявними пропсами.
+
+### HOME+.7 Прибирання старого клієнтського механізму
+
+- [x] HOME+.7.1 Видалити `lib/progress/useFeaturedCourse.ts` і
+      `lib/progress/localFeaturedCourse.ts` — повністю замінені
+      серверним `modules/siteSettings`.
+- [x] HOME+.7.2 Видалити `lib/store/slices/featuredCourseSlice.ts` і
+      його реєстрацію (`featuredCourse: featuredCourseReducer`) у
+      `lib/store/store.ts`.
+- [x] HOME+.7.3 Прогнати пошук по проєкту (`grep -r
+      "useFeaturedCourse\|localFeaturedCourse\|featuredCourseSlice"`)
+      — переконатись, що жоден компонент більше не імпортує прибрані
+      файли (кандидати, які вже знайдено аудитом: `HeroSection`,
+      `ProgramSection`, `MasterSection`, `CtaBanner`,
+      `FeaturedCoursePicker` — усі вже покриті HOME+.3/HOME+.6).
+
+### HOME+.8 Крайні випадки, узгодженість кешу, QA
+
+- [ ] HOME+.8.1 Переконатись, що зміна featured-курсу в адмінці
+      з'являється на лендінгу БЕЗ повного редеплою: `revalidatePath("/")`
+      у `setFeaturedCourseAction`/`clearFeaturedCourseAction` (HOME+.1.4)
+      + `export const dynamic = "force-dynamic"` на `app/page.tsx`
+      (HOME+.5.2) мають працювати РАЗОМ — перевірити вручну після
+      реалізації (змінити вибір в адмінці → оновити `/` в іншій вкладці
+      без хард-рефрешу кешу браузера → переконатись, що hero/програма/
+      про курс дійсно оновились).
+- [ ] HOME+.8.2 Порожній стан "featured-курс не обраний" (новий сайт,
+      `SiteSettings` ще не існує) — усі 5 секцій коректно падають на
+      існуючий статичний фолбек-контент, лендінг не падає з помилкою.
+- [ ] HOME+.8.3 Featured-курс знято з публікації АБО видалено після
+      того, як його обрали — `getFeaturedCourseService` (HOME+.1.3) це
+      вже трактує як "курсу немає", `onDelete: SetNull` (HOME+.0.1)
+      підчищає `featuredCourseId` при видаленні курсу — секції падають
+      на фолбек, у пікері адмінки (HOME+.3.2) вибір автоматично
+      показує "Не показувати жоден курс" при наступному відкритті
+      сторінки.
+- [ ] HOME+.8.4 Featured-курс обрано, але в нього 0 реальних уроків —
+      `ProgramSection`/`HeroSection` вже мають готовий принцип
+      `usingRealLessons`/`firstLesson` для цього (той самий, що вже
+      обробляє випадок "курс без уроків" до цієї задачі) — переконатись,
+      що він і далі коректно працює з новим джерелом `featuredCourse`.
+- [ ] HOME+.8.5 Ручна перевірка `eslint`/`tsc --noEmit` на всіх змінених
+      файлах (той самий застережний коментар, що вже в попередніх
+      фазах: повний `tsc`/`prisma generate` у сендбоксі не проганяється
+      через відсутність мережі до Prisma engine — прогнати локально/CI
+      перед деплоєм, і саму SQL-міграцію HOME+.0.3 звірити з реальною
+      Postgres-БД перед продом).
+
+---
+
+**Свідомо поза межами цієї фази** (не входило в прямий запит
+користувача — "hero, кількість уроків, про курс"):
+
+- Секція "Про майстра" (`MasterSection`) отримує featured-курс новим
+  шляхом (HOME+.6.4, технічна необхідність після прибирання
+  `useFeaturedCourse`), але її ВЛАСНІ поля (`masterName`/`masterBio`/
+  `masterAvatarUrl`) і без цієї фази вже існують у моделі `Course` — і
+  досі **не мають UI для редагування** в `CourseForm.tsx` (окрема,
+  раніше не задокументована прогалина, знайдена цим аудитом). Окрема
+  майбутня задача, якщо знадобиться.
+- Мультивибір/розклад "різні featured-курси в різні періоди" —
+  `SiteSettings` навмисно однорядковий (один активний вибір), без
+  історії чи розкладу показу.
+- Позиціювання/порядок пунктів `introHighlights` (drag-n-drop) — лише
+  проста лінійна форма (додати в кінець/прибрати), без перетягування.
+
+**Статус: HOME+.0–HOME+.7 РЕАЛІЗОВАНО (29.08.2026).** Порожня БД/новий
+сайт (`SiteSettings` ще не існує) і "курс без уроків" коректно
+обробляються тим самим фолбек-принципом, що вже прийнятий у проєкті —
+детальна ручна QA-перевірка цих і решти крайніх випадків (HOME+.8)
+лишається окремим кроком. Не прогнано в сендбоксі: `prisma generate`
+(потрібна мережа до Prisma engine — той самий відомий бар'єр сендбокса,
+що й у попередніх фазах) і повний `tsc`/`eslint` по всьому проєкту
+(структурна перевірка змінених файлів — баланс дужок, типи пропсів —
+зроблена вручну). Рекомендація та сама: прогнати `prisma migrate
+deploy`/`prisma generate`/`tsc --noEmit`/`eslint` локально або в CI
+перед деплоєм, і саму SQL-міграцію (`20260829120000_site_settings_
+featured_course`) звірити з реальною Postgres-БД.

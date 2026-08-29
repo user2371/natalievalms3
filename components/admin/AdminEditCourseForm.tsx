@@ -46,7 +46,9 @@ export function AdminEditCourseForm({ course }: { course: Course }) {
       initial={{
         title: course.title,
         description: course.description,
+        introTitle: course.introTitle ?? "",
         introText: course.introDescription ?? "",
+        introHighlights: course.introHighlights ?? [],
         trailerUrl: course.introVideoUrl ?? "",
         published: course.published,
         coverImage: course.coverImage ?? undefined,

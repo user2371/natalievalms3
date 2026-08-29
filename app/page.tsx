@@ -9,8 +9,10 @@ import { MasterSection } from "@/components/landing/MasterSection";
 import { TestimonialsSection } from "@/components/landing/TestimonialsSection";
 import { CtaBanner } from "@/components/landing/CtaBanner";
 import { Footer } from "@/components/landing/Footer";
-import { listCoursesService } from "@/modules/courses";
 import { listLessonsService } from "@/modules/lessons";
+import { getFeaturedCourseAction } from "@/modules/siteSettings";
+
+export const dynamic = "force-dynamic";
 
 /**
  * Server Component (задача 3.11) — раніше був `"use client"` лише заради
@@ -20,26 +22,31 @@ import { listLessonsService } from "@/modules/lessons";
  * сам читає реальну сесію через `useSession()`), тому клієнтський стан тут
  * більше не потрібен.
  *
- * Це відкрило можливість завантажити реальні курси з БД
- * (`listCoursesService` з `modules/courses`) прямо тут, на сервері, і
- * передати в `<HeroSection>` пропом — `useFeaturedCourse` (клієнтський,
- * `localStorage`-вибір адміна) і реальні DB-курси лишаються двома окремими
- * джерелами (задокументована проблема 0.20.1), Hero лише "містить" їх за
- * `slug`, коли можливо (деталі — в `HeroSection.tsx`).
+ * ФАЗА HOME+ (29.08.2026): featured-курс тепер вантажиться ТУТ, на
+ * сервері (`getFeaturedCourseAction`, `modules/siteSettings`), замість
+ * колишнього клієнтського `useFeaturedCourse`/`localStorage`-вибору
+ * (задокументована проблема 0.20.1 — тепер вирішена). Один готовий
+ * об'єкт `featuredCourse: Course | null` передається в усі п'ять секцій
+ * лендінгу, які його споживають (`HeroSection`/`ProgramSection`/
+ * `IntroSection`/`MasterSection`/`CtaBanner`) — секції більше НЕ шукають
+ * "свій" курс самі за `slug`.
  *
- * `.catch(() => [])` — щоб недоступність БД (напр. без мережі до Prisma
- * engine) не валила рендер усього лендінгу, а просто лишала Hero на
- * статичних даних, як і до цієї задачі.
+ * `export const dynamic = "force-dynamic"` — без цього Next.js міг би
+ * закешувати/пререндерити головну сторінку один раз при білді, і зміна
+ * featured-курсу адміном не з'явилась би на сайті без повного редеплою
+ * (той самий прапорець, що вже є на `/courses` і `/admin/courses`).
+ *
+ * `.catch(() => [])`/`.catch(() => null)` — щоб недоступність БД (напр.
+ * без мережі до Prisma engine) не валила рендер усього лендінгу, а
+ * просто лишала секції на статичних фолбек-даних, як і до цієї задачі.
  */
 export default async function Home() {
-  const realCourses = await listCoursesService(true).catch(() => []);
-  const realLessonsByCourseId = await Promise.all(
-    realCourses.map(
-      async (course) => [course.id, await listLessonsService(course.id)] as const,
-    ),
-  )
-    .then((entries) => Object.fromEntries(entries))
-    .catch(() => ({}));
+  const featuredCourse = await getFeaturedCourseAction().catch(() => null);
+  const realLessonsByCourseId = featuredCourse
+    ? await listLessonsService(featuredCourse.id)
+        .then((lessons) => ({ [featuredCourse.id]: lessons }))
+        .catch(() => ({}))
+    : {};
 
   return (
     <div className="flex flex-1 flex-col">
@@ -48,20 +55,20 @@ export default async function Home() {
       <main className="relative flex-1">
         <DecorativeBackground />
         <HeroSection
-          realCourses={realCourses}
+          featuredCourse={featuredCourse}
           realLessonsByCourseId={realLessonsByCourseId}
         />
         <AudienceSection />
         <ProgramSection
-          realCourses={realCourses}
+          featuredCourse={featuredCourse}
           realLessonsByCourseId={realLessonsByCourseId}
         />
         <StepsSection />
-        <IntroSection />
-        <MasterSection realCourses={realCourses} />
+        <IntroSection featuredCourse={featuredCourse} />
+        <MasterSection featuredCourse={featuredCourse} />
         <TestimonialsSection />
         <CtaBanner
-          realCourses={realCourses}
+          featuredCourse={featuredCourse}
           realLessonsByCourseId={realLessonsByCourseId}
         />
       </main>

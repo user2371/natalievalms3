@@ -16,7 +16,9 @@ import {
 export interface CourseFormValues {
   title: string;
   description: string;
+  introTitle: string;
   introText: string;
+  introHighlights: string[];
   trailerUrl: string;
   published: boolean;
 }
@@ -37,7 +39,9 @@ export interface CourseFormProps {
 const EMPTY: CourseFormValues = {
   title: "",
   description: "",
+  introTitle: "",
   introText: "",
+  introHighlights: [],
   trailerUrl: "",
   published: false,
 };
@@ -119,6 +123,27 @@ export function CourseForm({
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
+  // Редактор пунктів-переваг секції "Про курс" (задача HOME+.4.1) — той
+  // самий підхід додавання/видалення рядків, що вже в `QuestionForm.tsx`
+  // для варіантів відповіді квізу.
+  function updateHighlight(index: number, value: string) {
+    setValues((prev) => ({
+      ...prev,
+      introHighlights: prev.introHighlights.map((item, i) => (i === index ? value : item)),
+    }));
+  }
+
+  function addHighlight() {
+    setValues((prev) => ({ ...prev, introHighlights: [...prev.introHighlights, ""] }));
+  }
+
+  function removeHighlight(index: number) {
+    setValues((prev) => ({
+      ...prev,
+      introHighlights: prev.introHighlights.filter((_, i) => i !== index),
+    }));
+  }
+
   function validate(): boolean {
     const nextErrors: typeof errors = {};
     if (values.title.trim().length < 3) {
@@ -166,8 +191,13 @@ export function CourseForm({
     const formData = new FormData();
     formData.append("title", values.title);
     formData.append("description", values.description);
+    formData.append("introTitle", values.introTitle);
     formData.append("introVideoUrl", values.trailerUrl);
     formData.append("introDescription", values.introText);
+    values.introHighlights
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .forEach((item) => formData.append("introHighlights", item));
     formData.append("published", String(values.published));
 
     if (coverFile) {
@@ -200,6 +230,13 @@ export function CourseForm({
         />
       </div>
 
+      <Input
+        label='Заголовок секції "Про курс"'
+        placeholder="Напр. Знайомство з курсом"
+        value={values.introTitle}
+        onChange={(e) => update("introTitle", e.target.value)}
+      />
+
       <div className="flex flex-col gap-1.5">
         <label className="text-sm font-medium text-ink">Про курс (вступний текст)</label>
         <RichTextPlaceholder
@@ -215,6 +252,34 @@ export function CourseForm({
         value={values.trailerUrl}
         onChange={(e) => update("trailerUrl", e.target.value)}
       />
+
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-ink">
+          Пункти-переваги в секції "Про курс"
+        </label>
+        {values.introHighlights.map((item, index) => (
+          <div key={index} className="flex items-center gap-2">
+            <div className="flex-1">
+              <Input
+                placeholder="Напр. Анатомія нігтя та поширені захворювання"
+                value={item}
+                onChange={(e) => updateHighlight(index, e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => removeHighlight(index)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-danger/10 hover:text-danger"
+              aria-label={`Прибрати пункт ${index + 1}`}
+            >
+              <CloseIcon size={14} />
+            </button>
+          </div>
+        ))}
+        <Button type="button" variant="outline" size="sm" onClick={addHighlight} className="self-start">
+          + Додати пункт
+        </Button>
+      </div>
 
       <div className="flex flex-col gap-1.5">
         <label className="text-sm font-medium text-ink">Обкладинка курсу</label>

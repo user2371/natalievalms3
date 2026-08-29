@@ -48,6 +48,14 @@ function readCourseFormFields(formData: FormData) {
     masterName: getString("masterName") || null,
     masterBio: getString("masterBio") || null,
     masterAvatarUrl: getString("masterAvatarUrl") || null,
+    introTitle: getString("introTitle") || null,
+    // Кілька полів `introHighlights` з однаковим іменем (задача
+    // HOME+.2.4) — `FormData.getAll` повертає їх усі; порожні/пробільні
+    // рядки відфільтровуються (адмін міг лишити порожній рядок у списку).
+    introHighlights: formData
+      .getAll("introHighlights")
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .filter((value) => value.length > 0),
   };
 }
 
@@ -79,6 +87,7 @@ export async function createCourseAction(formData: FormData) {
       );
       revalidatePath("/admin/courses");
       revalidatePath("/courses");
+      revalidatePath("/");
       return { success: true as const, course, error: null };
     } catch (dbErr) {
       // Orphan-safety (той самий принцип, що вже в `modules/account/
@@ -140,6 +149,10 @@ export async function updateCourseAction(formData: FormData) {
     revalidatePath("/admin/courses");
     revalidatePath("/courses");
     revalidatePath(`/courses/${course.slug}`);
+    // Курс міг бути featured-курсом на головній (задача HOME+) —
+    // редагування hero/про-курс/про-майстра полів має одразу
+    // відобразитись на лендінгу, без окремого перемикання featured-курсу.
+    revalidatePath("/");
     return { success: true as const, course, error: null };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Не вдалося оновити курс";

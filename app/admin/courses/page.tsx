@@ -5,6 +5,7 @@ import { FeaturedCoursePicker } from "@/components/admin/FeaturedCoursePicker";
 import { Button } from "@/components/ui/Button";
 import { GraduationCapIcon } from "@/components/ui/icons";
 import { listCoursesService } from "@/modules/courses";
+import { getFeaturedCourseAction } from "@/modules/siteSettings";
 export const dynamic = 'force-dynamic';
 /**
  * Список курсів в адмінці (задача 0.13.2 → 8.1.1, підключено до реальних
@@ -22,16 +23,20 @@ export const dynamic = 'force-dynamic';
  * кожен курс; додати можна пізніше окремим кроком, не входило в 8.1.1
  * буквально ("реальні дані, статус published/draft").
  *
- * 19.07.2026, сесія 17: над таблицею — блок "Курс на головній сторінці"
- * (задача 0.20), винесений у `FeaturedCoursePicker` (клієнтський
- * "острівець", бо use `useFeaturedCourse`/`localStorage`) — той самий
- * `Select` із `COURSES` (публічний демо-каталог лендінгу, `lib/data/courses.ts`,
- * НЕ `modules/courses` — навмисно, бо саме `COURSES` рендериться на
- * лендінгу; два непов'язані набори даних курсів — задокументована раніше
- * проблема, див. `IMPLEMENTATION_STATUS.md`), не чіпали.
+ * 19.07.2026, сесія 17 → 29.08.2026, ФАЗА HOME+: над таблицею — блок
+ * "Курс на головній сторінці" (задача 0.20), винесений у
+ * `FeaturedCoursePicker` (клієнтський "острівець"). Раніше
+ * вибір зберігався лише в `localStorage`/Redux
+ * (`useFeaturedCourse`) і пропонував статичний демо-каталог
+ * `lib/data/courses.ts`; тепер — реальні курси (`modules/courses`, ті
+ * самі `courses`, що вже завантажені тут для таблиці) і
+ * сервербек `modules/siteSettings`
+ * (`SiteSettings.featuredCourseId`) — вибір видимий усім
+ * відвідувачам сайту, а не лише в браузері адміна.
  */
 export default async function AdminCoursesPage() {
   const courses = await listCoursesService();
+  const featuredCourse = await getFeaturedCourseAction();
 
   return (
     <div>
@@ -47,7 +52,10 @@ export default async function AdminCoursesPage() {
         }
       />
 
-      <FeaturedCoursePicker />
+      <FeaturedCoursePicker
+        courses={courses}
+        featuredCourseId={featuredCourse?.id ?? null}
+      />
 
       <AdminCoursesTable initialCourses={courses} />
     </div>

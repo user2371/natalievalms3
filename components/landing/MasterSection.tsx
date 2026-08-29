@@ -1,8 +1,5 @@
-"use client";
-
 import { Avatar } from "@/components/ui/Avatar";
 import { StarIcon, UsersIcon, CheckIcon } from "@/components/ui/icons";
-import { useFeaturedCourse } from "@/lib/progress/useFeaturedCourse";
 import type { Course as RealCourse } from "@/modules/courses";
 
 const STATS = [
@@ -19,25 +16,24 @@ const FALLBACK_BIO =
 
 export interface MasterSectionProps {
   /**
-   * Реальні (Prisma) курси з БД — передаються з `app/page.tsx` (Server
-   * Component, `listCoursesService(true)`, той самий проп, що й у
-   * `HeroSection`). Секція "містить" вибраний адміном статичний курс
-   * (`useFeaturedCourse`, задача 0.20) з реальним DB-курсом за `slug`
-   * (задача 3.11, доповнення 24.07.2026 — нові поля `masterName`/
-   * `masterBio`/`masterAvatarUrl` у `Course`, міграція
-   * `20260725060000_course_master_fields`). Якщо збігу немає, або поля
-   * майстра порожні — секція лишається на статичному фолбеку, як і була.
+   * Featured-курс, вибраний адміном (`modules/siteSettings`, ФАЗА
+   * HOME+) — вантажиться на сервері в `app/page.tsx` і передається
+   * сюди готовим (задача 3.11, доповнення 24.07.2026 — поля
+   * `masterName`/`masterBio`/`masterAvatarUrl` у `Course`, міграція
+   * `20260725060000_course_master_fields`). `null`, або порожні поля
+   * майстра — секція лишається на статичному фолбеку.
+   *
+   * ДО ФАЗИ HOME+ секція сама шукала курс за `slug` через клієнтський
+   * `useFeaturedCourse` — тепер це робить `app/page.tsx`, тут лише
+   * готовий проп.
    */
-  realCourses?: RealCourse[];
+  featuredCourse?: RealCourse | null;
 }
 
-export function MasterSection({ realCourses = [] }: MasterSectionProps) {
-  const { featuredCourse } = useFeaturedCourse();
-  const realCourse = realCourses.find((course) => course.slug === featuredCourse.slug);
-
-  const name = realCourse?.masterName || FALLBACK_NAME;
-  const bio = realCourse?.masterBio || FALLBACK_BIO;
-  const avatarUrl = realCourse?.masterAvatarUrl ?? null;
+export function MasterSection({ featuredCourse = null }: MasterSectionProps) {
+  const name = featuredCourse?.masterName || FALLBACK_NAME;
+  const bio = featuredCourse?.masterBio || FALLBACK_BIO;
+  const avatarUrl = featuredCourse?.masterAvatarUrl ?? null;
 
   return (
     <section id="master" className="relative py-16 sm:py-20">

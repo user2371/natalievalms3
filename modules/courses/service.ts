@@ -104,6 +104,8 @@ export async function createCourseService(
     masterName: parsed.data.masterName,
     masterBio: parsed.data.masterBio,
     masterAvatarUrl: parsed.data.masterAvatarUrl,
+    introTitle: parsed.data.introTitle,
+    introHighlights: parsed.data.introHighlights,
   });
 }
 
