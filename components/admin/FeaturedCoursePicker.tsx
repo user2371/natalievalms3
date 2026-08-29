@@ -62,7 +62,7 @@ export function FeaturedCoursePicker({ courses, featuredCourseId }: FeaturedCour
           </label>
           <p className="mt-1 max-w-md text-xs text-muted">
             Цей курс показується на лендінгу — опис і кількість уроків у hero-блоці,
-            секція "Про курс" і кількість уроків у "Програмі курсу".
+            секція &quot;Про курс&quot; і кількість уроків у &quot;Програмі курсу&quot;.
           </p>
           {error && <p className="mt-1 text-xs text-danger">{error}</p>}
         </div>

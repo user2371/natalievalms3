@@ -255,7 +255,7 @@ export function CourseForm({
 
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium text-ink">
-          Пункти-переваги в секції "Про курс"
+          Пункти-переваги в секції &quot;Про курс&quot;
         </label>
         {values.introHighlights.map((item, index) => (
           <div key={index} className="flex items-center gap-2">
