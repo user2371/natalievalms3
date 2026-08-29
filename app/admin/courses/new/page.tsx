@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
-import { CourseForm, type CourseFormValues } from "@/components/admin/CourseForm";
+import { CourseForm } from "@/components/admin/CourseForm";
 import { createCourseAction } from "@/modules/courses";
 
 /**
@@ -19,18 +19,11 @@ export default function AdminNewCoursePage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(values: CourseFormValues) {
+  async function handleSubmit(formData: FormData) {
     setSubmitting(true);
     setError(null);
 
-    const result = await createCourseAction({
-      title: values.title,
-      description: values.description,
-      coverImage: values.coverImage.trim() || null,
-      published: values.published,
-      introVideoUrl: values.trailerUrl.trim() || null,
-      introDescription: values.introText.trim() || null,
-    });
+    const result = await createCourseAction(formData);
 
     if (result.success) {
       router.push("/admin/courses");

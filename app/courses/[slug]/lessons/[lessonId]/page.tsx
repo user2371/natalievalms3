@@ -11,7 +11,7 @@ import { RealQuizBlock } from "@/components/lesson/RealQuizBlock";
 import { RealCommentsBlock } from "@/components/lesson/RealCommentsBlock";
 import { RealHomeworkBlock } from "@/components/lesson/RealHomeworkBlock";
 import { ArticleRenderer } from "@/components/lesson/ArticleRenderer";
-import { Card } from "@/components/ui/Card";
+import { LessonSpoiler } from "@/components/lesson/LessonSpoiler";
 import { Badge } from "@/components/ui/Badge";
 import { ArrowLeftIcon, ArrowRightIcon, DocumentIcon } from "@/components/ui/icons";
 import { extractYoutubeId } from "@/lib/youtube";
@@ -203,22 +203,29 @@ export default async function CourseLessonPage({ params }: CourseLessonPageProps
               <GuestProgressBanner />
             </div>
 
-            <RealHomeworkBlock
-              lessonId={lesson.id}
-              initialVideoUrl={myHomework?.videoUrl ?? null}
-              assignment={homeworkAssignment}
+            <LessonSpoiler title="Домашнє завдання" className="mt-6">
+              <div className="px-6 pb-6 sm:px-8 sm:pb-8">
+                <RealHomeworkBlock
+                  lessonId={lesson.id}
+                  initialVideoUrl={myHomework?.videoUrl ?? null}
+                  assignment={homeworkAssignment}
+                  bare
+                />
+              </div>
+            </LessonSpoiler>
+
+            <LessonSpoiler
+              title={
+                <span className="flex flex-wrap items-center gap-3">
+                  Про сьогоднішній урок
+                  <Badge variant="soft" icon={<DocumentIcon size={13} />}>
+                    Стаття про урок
+                  </Badge>
+                </span>
+              }
               className="mt-6"
-            />
-
-            <Card padding="lg" className="mt-6">
-              <span className="flex items-center gap-3">
-                <h2 className="font-serif text-xl text-ink">Про сьогоднішній урок</h2>
-                <Badge variant="soft" icon={<DocumentIcon size={13} />}>
-                  Стаття про урок
-                </Badge>
-              </span>
-
-              <div className="mt-4">
+            >
+              <div className="px-6 pb-6 sm:px-8 sm:pb-8">
                 {article && article.contentJson.trim() ? (
                   <ArticleRenderer contentJson={article.contentJson} />
                 ) : (
@@ -228,16 +235,19 @@ export default async function CourseLessonPage({ params }: CourseLessonPageProps
                   </p>
                 )}
               </div>
-            </Card>
+            </LessonSpoiler>
 
             {quizQuestions && (
-              <div className="mt-6">
-                <RealQuizBlock
-                  courseId={course.id}
-                  lessonId={lesson.id}
-                  questions={quizQuestions}
-                />
-              </div>
+              <LessonSpoiler title="Квіз до уроку" className="mt-6">
+                <div className="px-6 pb-6 sm:px-8 sm:pb-8">
+                  <RealQuizBlock
+                    courseId={course.id}
+                    lessonId={lesson.id}
+                    questions={quizQuestions}
+                    bare
+                  />
+                </div>
+              </LessonSpoiler>
             )}
 
             <RealCommentsBlock

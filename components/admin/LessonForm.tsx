@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
-import { EditIcon } from "@/components/ui/icons";
+import { EditIcon, CheckIcon } from "@/components/ui/icons";
 import { isYoutubeUrl } from "@/lib/youtube";
 
 export interface LessonFormValues {
@@ -14,15 +14,18 @@ export interface LessonFormValues {
   duration: string;
   videoProvider: string;
   videoUrl: string;
-  articleText: string;
 }
 
 export interface LessonFormProps {
   initial?: Partial<LessonFormValues>;
   /** Посилання на конструктор квізу (задача 0.13.7) — тільки для вже збереженого уроку. */
   quizHref?: string;
+  /** ФАЗА IND+, задача IND+.1 (29.08.2026) — чи вже є хоча б одне питання квізу для цього уроку (визначає напис кнопки та бейдж "Додано"). */
+  hasQuiz?: boolean;
   /** Посилання на редактор статті (задача 0.18) — тільки для вже збереженого уроку, той самий принцип, що й `quizHref`. */
   articleHref?: string;
+  /** ФАЗА IND+, задача IND+.1 (29.08.2026) — чи вже збережено непорожню статтю для цього уроку (визначає напис кнопки та бейдж "Додано"). Замінює попередню (непідключену) перевірку через `values.articleText`. */
+  hasArticle?: boolean;
   /** ФАЗА HW+, задача HW+.3.3 (28.08.2026) — посилання на редактор ДЗ, той самий принцип, що й `articleHref`. */
   homeworkHref?: string;
   /** ФАЗА HW+, HW+.3.3 — чи вже збережено опис ДЗ для цього уроку (визначає напис кнопки: "Додати"/"Редагувати"). */
@@ -42,8 +45,23 @@ const EMPTY: LessonFormValues = {
   duration: "",
   videoProvider: "youtube",
   videoUrl: "",
-  articleText: "",
 };
+
+/**
+ * ФАЗА IND+, задача IND+.1 — компактний бейдж "Додано" для блоків
+ * стаття/квіз/ДЗ у формі уроку: показує статус ще до прочитання
+ * напису кнопки. Рендериться лише коли відповідний `has*` === true;
+ * інакше — нічого (порожній стан і так видно з напису кнопки
+ * "Додати ...").
+ */
+function AddedBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+      <CheckIcon size={12} />
+      Додано
+    </span>
+  );
+}
 
 const VIDEO_PROVIDER_OPTIONS = [{ value: "youtube", label: "YouTube" }];
 
@@ -74,7 +92,9 @@ const VIDEO_PROVIDER_OPTIONS = [{ value: "youtube", label: "YouTube" }];
 export function LessonForm({
   initial,
   quizHref,
+  hasQuiz = false,
   articleHref,
+  hasArticle = false,
   homeworkHref,
   hasHomeworkAssignment = false,
   onCancel,
@@ -158,7 +178,10 @@ export function LessonForm({
       />
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-ink">Стаття до уроку</label>
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-ink">Стаття до уроку</label>
+          {hasArticle && <AddedBadge />}
+        </div>
         {articleHref ? (
           <div>
             <Link href={articleHref}>
@@ -169,7 +192,7 @@ export function LessonForm({
                 icon={<EditIcon size={16} />}
                 iconPosition="left"
               >
-                {values.articleText ? "Редагувати статтю" : "Додати статтю"}
+                {hasArticle ? "Редагувати статтю" : "Додати статтю"}
               </Button>
             </Link>
           </div>
@@ -181,7 +204,10 @@ export function LessonForm({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-ink">Домашнє завдання до уроку</label>
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-ink">Домашнє завдання до уроку</label>
+          {hasHomeworkAssignment && <AddedBadge />}
+        </div>
         {homeworkHref ? (
           <div>
             <Link href={homeworkHref}>
@@ -205,11 +231,20 @@ export function LessonForm({
 
       {quizHref && (
         <div>
-          <label className="text-sm font-medium text-ink">Перейти до квізу</label>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-ink">Квіз до уроку</label>
+            {hasQuiz && <AddedBadge />}
+          </div>
           <div className="mt-1.5">
             <Link href={quizHref}>
-              <Button type="button" variant="outline" size="sm">
-                Налаштувати квіз
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                icon={<EditIcon size={16} />}
+                iconPosition="left"
+              >
+                {hasQuiz ? "Редагувати квіз" : "Додати квіз"}
               </Button>
             </Link>
           </div>

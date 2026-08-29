@@ -26,6 +26,13 @@ export interface QuizBlockProps {
    */
   onComplete?: (result: { correctCount: number; total: number }) => void;
   className?: string;
+  /**
+   * Якщо `true` — рендериться БЕЗ зовнішнього `<Card>` і без заголовка
+   * "Квіз до уроку" (лічильник питань лишається). Використовується, коли
+   * блок уже загорнутий у власний контейнер із заголовком — напр.
+   * `LessonSpoiler` на сторінці уроку.
+   */
+  bare?: boolean;
 }
 
 /**
@@ -39,6 +46,7 @@ export function QuizBlock({
   questions = DEFAULT_QUIZ_QUESTIONS,
   onComplete,
   className,
+  bare = false,
 }: QuizBlockProps) {
   const [index, setIndex] = useState(0);
   // Обрані варіанти по кожному питанню (id питання -> id обраних варіантів).
@@ -106,20 +114,30 @@ export function QuizBlock({
     setFinished(false);
   }
 
-  return (
-    <Card padding="lg" className={className}>
-      <div className="flex items-center justify-between gap-3">
-        <span className="flex items-center gap-3">
-          <h2 className="font-serif text-xl text-ink">Квіз до уроку</h2>
-          <Badge variant="soft" icon={<SparkleIcon size={13} />}>
-            Перевір себе
-          </Badge>
-        </span>
+  const content = (
+    <>
+      <div className={cn("flex items-center justify-between gap-3", bare && "mt-0")}>
+        {bare ? (
+          !finished && (
+            <span className="text-sm font-medium text-muted">
+              Питання {index + 1} з {total}
+            </span>
+          )
+        ) : (
+          <>
+            <span className="flex items-center gap-3">
+              <h2 className="font-serif text-xl text-ink">Квіз до уроку</h2>
+              <Badge variant="soft" icon={<SparkleIcon size={13} />}>
+                Перевір себе
+              </Badge>
+            </span>
 
-        {!finished && (
-          <span className="shrink-0 text-sm font-medium text-muted">
-            Питання {index + 1} з {total}
-          </span>
+            {!finished && (
+              <span className="shrink-0 text-sm font-medium text-muted">
+                Питання {index + 1} з {total}
+              </span>
+            )}
+          </>
         )}
       </div>
 
@@ -181,6 +199,16 @@ export function QuizBlock({
           />
         </>
       )}
+    </>
+  );
+
+  if (bare) {
+    return <div className={className}>{content}</div>;
+  }
+
+  return (
+    <Card padding="lg" className={className}>
+      {content}
     </Card>
   );
 }

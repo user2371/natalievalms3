@@ -3,6 +3,8 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminEditLessonForm } from "@/components/admin/AdminEditLessonForm";
 import { getLessonByIdService } from "@/modules/lessons";
 import { getHomeworkAssignmentByLessonIdService } from "@/modules/homeworkAssignments";
+import { getArticleByLessonIdService } from "@/modules/articles";
+import { getQuizQuestionsForLessonService } from "@/modules/quizzes";
 
 /**
  * Редагування уроку (задача 0.13.5 → 8.2.3, підключено до реальних
@@ -14,6 +16,17 @@ import { getHomeworkAssignmentByLessonIdService } from "@/modules/homeworkAssign
  * `getHomeworkAssignmentByLessonIdService`, щоб кнопка "Додати ДЗ"/
  * "Редагувати ДЗ" у `LessonForm` показувала правильний напис за
  * наявністю вже збереженого опису завдання.
+ *
+ * ФАЗА IND+, задача IND+.3 (29.08.2026): той самий принцип поширено на
+ * статтю й квіз — додано `getArticleByLessonIdService`/
+ * `getQuizQuestionsForLessonService`, щоб `LessonForm` показувала
+ * правильний напис кнопки й бейдж "Додано" для всіх трьох блоків
+ * (стаття/квіз/ДЗ), а не лише для ДЗ. `hasArticle` — та сама перевірка
+ * "непорожня стаття" (`article.contentJson.trim()`), що вже на сторінці
+ * уроку студента. `hasQuiz` — `Boolean(quizQuestions)`, бо
+ * `getQuizQuestionsForLessonService` вже повертає `null`, коли квізу
+ * немає або в ньому нуль питань (той самий принцип "квіз без питань =
+ * вважати відсутнім", що й на самій сторінці проходження квізу).
  */
 export default async function AdminEditLessonPage({
   params,
@@ -25,7 +38,11 @@ export default async function AdminEditLessonPage({
 
   if (!lesson || lesson.courseId !== courseId) notFound();
 
-  const homeworkAssignment = await getHomeworkAssignmentByLessonIdService(lessonId);
+  const [homeworkAssignment, article, quizQuestions] = await Promise.all([
+    getHomeworkAssignmentByLessonIdService(lessonId),
+    getArticleByLessonIdService(lessonId),
+    getQuizQuestionsForLessonService(lessonId),
+  ]);
 
   return (
     <div>
@@ -43,7 +60,9 @@ export default async function AdminEditLessonPage({
         <AdminEditLessonForm
           lesson={lesson}
           quizHref={`/admin/courses/${courseId}/lessons/${lesson.id}/quiz`}
+          hasQuiz={Boolean(quizQuestions)}
           articleHref={`/admin/courses/${courseId}/lessons/${lesson.id}/article`}
+          hasArticle={Boolean(article && article.contentJson.trim())}
           homeworkHref={`/admin/courses/${courseId}/lessons/${lesson.id}/homework`}
           hasHomeworkAssignment={Boolean(
             homeworkAssignment &&

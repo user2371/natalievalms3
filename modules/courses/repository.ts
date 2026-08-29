@@ -41,6 +41,8 @@ export async function findCourseBySlugExists(slug: string): Promise<boolean> {
 }
 
 export interface CreateCourseData {
+  /** Опційний явний `id` (замість автогенерованого Prisma `@default(uuid())`) — див. `service.ts::createCourseService`. */
+  id?: string;
   slug: string;
   title: string;
   description: string;
@@ -56,6 +58,7 @@ export interface CreateCourseData {
 export async function createCourse(data: CreateCourseData) {
   return prisma.course.create({
     data: {
+      ...(data.id ? { id: data.id } : {}),
       slug: data.slug,
       title: data.title,
       description: data.description,

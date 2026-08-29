@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CourseForm, type CourseFormValues } from "@/components/admin/CourseForm";
+import { CourseForm } from "@/components/admin/CourseForm";
 import { updateCourseAction } from "@/modules/courses";
 import type { Course } from "@/modules/courses";
 
@@ -13,25 +13,25 @@ import type { Course } from "@/modules/courses";
  * `onSubmit` викликає `updateCourseAction`. Той самий поділ
  * "сервер вантажить дані, клієнт обробляє сабміт", що й
  * `AdminNewCoursePage`, лише з додатковим `initial`.
+ *
+ * ОНОВЛЕНО (обкладинка курсу тепер файловий аплоад, не URL — див.
+ * `CourseForm.tsx`): `CourseForm.onSubmit` тепер віддає готову
+ * `FormData` (текстові поля + опційний файл/прапорець видалення),
+ * сюди лише додається `id` курсу (єдине поле, якого немає всередині
+ * самої форми) перед відправкою в `updateCourseAction`
+ * (`modules/courses/actions.ts`).
  */
 export function AdminEditCourseForm({ course }: { course: Course }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(values: CourseFormValues) {
+  async function handleSubmit(formData: FormData) {
     setSubmitting(true);
     setError(null);
 
-    const result = await updateCourseAction({
-      id: course.id,
-      title: values.title,
-      description: values.description,
-      coverImage: values.coverImage.trim() || null,
-      published: values.published,
-      introVideoUrl: values.trailerUrl.trim() || null,
-      introDescription: values.introText.trim() || null,
-    });
+    formData.append("id", course.id);
+    const result = await updateCourseAction(formData);
 
     if (result.success) {
       router.push(`/admin/courses/${course.id}`);
@@ -48,8 +48,8 @@ export function AdminEditCourseForm({ course }: { course: Course }) {
         description: course.description,
         introText: course.introDescription ?? "",
         trailerUrl: course.introVideoUrl ?? "",
-        coverImage: course.coverImage ?? "",
         published: course.published,
+        coverImage: course.coverImage ?? undefined,
       }}
       onCancel={() => router.push(`/admin/courses/${course.id}`)}
       onSubmit={handleSubmit}

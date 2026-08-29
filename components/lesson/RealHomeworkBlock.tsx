@@ -27,6 +27,13 @@ export interface RealHomeworkBlockProps {
    */
   assignment: HomeworkAssignment | null;
   className?: string;
+  /**
+   * Якщо `true` — рендериться БЕЗ зовнішнього `<Card>` і без заголовка
+   * "Домашнє завдання". Використовується, коли блок уже загорнутий у
+   * власний контейнер із заголовком — напр. `LessonSpoiler` на сторінці
+   * уроку.
+   */
+  bare?: boolean;
 }
 
 /**
@@ -60,6 +67,7 @@ export function RealHomeworkBlock({
   initialVideoUrl,
   assignment,
   className,
+  bare = false,
 }: RealHomeworkBlockProps) {
   const { status } = useSession();
   const { openAuthModal } = useAuthModal();
@@ -107,9 +115,9 @@ export function RealHomeworkBlock({
     }
   }
 
-  return (
-    <Card padding="lg" className={className}>
-      <h2 className="font-serif text-xl text-ink">Домашнє завдання</h2>
+  const content = (
+    <>
+      {!bare && <h2 className="font-serif text-xl text-ink">Домашнє завдання</h2>}
 
       {hasAssignmentContent ? (
         <div className="mt-4 flex flex-col gap-4">
@@ -194,6 +202,16 @@ export function RealHomeworkBlock({
           </>
         )}
       </div>
+    </>
+  );
+
+  if (bare) {
+    return <div className={className}>{content}</div>;
+  }
+
+  return (
+    <Card padding="lg" className={className}>
+      {content}
     </Card>
   );
 }

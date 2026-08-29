@@ -14,6 +14,15 @@ export interface CourseCardProps {
    * хардкоду `/lessons`. Дизайн картки не змінюється, лише посилання.
    */
   href?: string;
+  /**
+   * Перевизначає обкладинку зі статичного `course.coverImage` (стокове
+   * фото-заглушка в `lib/data/courses.ts`) — коли для цього курсу є
+   * реальний запис у БД з власною завантаженою обкладинкою
+   * (`realMatch.coverImage`), потрібно показувати саме її, а не статичну.
+   * Якщо не передано або порожнє — використовується `course.coverImage`
+   * як і раніше.
+   */
+  coverImageOverride?: string | null;
 }
 
 /**
@@ -22,12 +31,19 @@ export interface CourseCardProps {
  * ще немає в розробці, показуються тим самим макетом, але не клікабельні —
  * з бейджем "Незабаром" замість CTA.
  */
-export function CourseCard({ course, className, href = "/lessons" }: CourseCardProps) {
+export function CourseCard({
+  course,
+  className,
+  href = "/lessons",
+  coverImageOverride,
+}: CourseCardProps) {
+  const coverImage = coverImageOverride?.trim() ? coverImageOverride : course.coverImage;
+
   const body = (
     <>
       <div className="relative aspect-[16/10] overflow-hidden bg-accent-soft">
         <Image
-          src={course.coverImage}
+          src={coverImage}
           alt=""
           fill
           sizes="(min-width: 1024px) 360px, (min-width: 640px) 50vw, 100vw"

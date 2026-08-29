@@ -19,13 +19,19 @@ import type { Lesson } from "@/modules/lessons";
 export function AdminEditLessonForm({
   lesson,
   quizHref,
+  hasQuiz,
   articleHref,
+  hasArticle,
   homeworkHref,
   hasHomeworkAssignment,
 }: {
   lesson: Lesson;
   quizHref: string;
+  /** ФАЗА IND+, задача IND+.2 — той самий принцип, що й `hasHomeworkAssignment`. */
+  hasQuiz: boolean;
   articleHref: string;
+  /** ФАЗА IND+, задача IND+.2 — той самий принцип, що й `hasHomeworkAssignment`. */
+  hasArticle: boolean;
   /** ФАЗА HW+, задача HW+.3.3 — той самий принцип, що й `articleHref`. */
   homeworkHref: string;
   hasHomeworkAssignment: boolean;
@@ -64,7 +70,9 @@ export function AdminEditLessonForm({
         videoUrl: lesson.videoUrl,
       }}
       quizHref={quizHref}
+      hasQuiz={hasQuiz}
       articleHref={articleHref}
+      hasArticle={hasArticle}
       homeworkHref={homeworkHref}
       hasHomeworkAssignment={hasHomeworkAssignment}
       onCancel={() => router.push(`/admin/courses/${lesson.courseId}/lessons`)}

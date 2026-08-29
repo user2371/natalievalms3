@@ -11,6 +11,8 @@ export interface RealQuizBlockProps {
   lessonId: string;
   questions: QuizQuestion[];
   className?: string;
+  /** Прокидається у `QuizBlock` — див. докстрінг `QuizBlockProps.bare`. */
+  bare?: boolean;
 }
 
 /**
@@ -45,6 +47,7 @@ export function RealQuizBlock({
   lessonId,
   questions,
   className,
+  bare,
 }: RealQuizBlockProps) {
   const { status } = useSession();
   const { markQuizResult } = useProgress(courseId);
@@ -66,6 +69,11 @@ export function RealQuizBlock({
   }
 
   return (
-    <QuizBlock questions={questions} onComplete={handleComplete} className={className} />
+    <QuizBlock
+      questions={questions}
+      onComplete={handleComplete}
+      className={className}
+      bare={bare}
+    />
   );
 }

@@ -10,4 +10,8 @@ export {
   getCourseByIdService,
 } from "./service";
 export { CreateCourseSchema, UpdateCourseSchema } from "./schema";
+export {
+  COURSE_COVER_MAX_SIZE_BYTES,
+  COURSE_COVER_ALLOWED_MIME_TYPES,
+} from "./schema";
 export type { Course, CreateCourseInput, UpdateCourseInput } from "./schema";

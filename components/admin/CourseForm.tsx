@@ -1,25 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
+import { CloseIcon, UploadIcon } from "@/components/ui/icons";
 import { RichTextPlaceholder } from "@/components/admin/RichTextPlaceholder";
+import { validateFileBeforeUpload } from "@/lib/images/validateFileBeforeUpload";
+import {
+  COURSE_COVER_ALLOWED_MIME_TYPES,
+  COURSE_COVER_MAX_SIZE_BYTES,
+} from "@/modules/courses";
 
 export interface CourseFormValues {
   title: string;
   description: string;
   introText: string;
   trailerUrl: string;
-  coverImage: string;
   published: boolean;
 }
 
 export interface CourseFormProps {
-  initial?: Partial<CourseFormValues>;
+  /** `coverImage` — URL уже завантаженої обкладинки (для редагування), окремо від решти текстових полів. */
+  initial?: Partial<CourseFormValues> & { coverImage?: string | null };
   onCancel: () => void;
-  onSubmit: (values: CourseFormValues) => void;
+  /** Готова `FormData` (текстові поля + опційний файл обкладинки/прапорець видалення) — форма сама збирає її з внутрішнього стану. */
+  onSubmit: (formData: FormData) => void;
   submitLabel?: string;
   /** Помилка від сервера (задача 8.1.7 — валідація і на сервері) — показується над кнопками. */
   submitError?: string | null;
@@ -32,8 +39,12 @@ const EMPTY: CourseFormValues = {
   description: "",
   introText: "",
   trailerUrl: "",
-  coverImage: "",
   published: false,
+};
+
+const COVER_ERROR_MESSAGES = {
+  maxSizeErrorMessage: "Розмір файлу перевищує 5MB",
+  formatErrorMessage: "Дозволені лише зображення у форматі JPG, PNG або WebP",
 };
 
 /**
@@ -45,17 +56,37 @@ const EMPTY: CourseFormValues = {
  *   `title` (`modules/courses/service.ts`, `generateUniqueSlug`) — адмін
  *   його не вводить руками (той самий принцип, що задокументований у
  *   `modules/courses/schema.ts` ще з Фази 3).
- * - **Задача 8.1.6 (спосіб зберігання обкладинки — треба було визначити):
- *   URL-поле**, а не файл-аплоад. У проєкті немає підключеного файлового
- *   сховища (S3/Cloudinary/тощо), а `Course.coverImage` в Prisma-схемі —
- *   звичайний `String?` (URL). Реальний аплоад файлів — окрема майбутня
- *   задача (потребує вибору й підключення провайдера зберігання).
  * - **Задача 8.1.7 (валідація на клієнті):** ті самі правила, що й у
  *   `CreateCourseSchema`/`UpdateCourseSchema` (`modules/courses/schema.ts`)
  *   — назва мінімум 3 символи, опис мінімум 10 символів. Серверна
  *   валідація вже існувала (Фаза 3) — тут лише дзеркало на клієнті для
  *   миттєвого фідбеку; `submitError` — коли форма технічно валідна на
  *   клієнті, але сервер усе одно відхилив (напр. мережева помилка).
+ *
+ * ОНОВЛЕНО (за прямим зверненням користувача — "Зроби щоб обкладинку для
+ * курсу можна було загружати як файл з усіма тими самими правилами що і
+ * для аватарки"): **"Обкладинка (URL зображення)" замінено на файловий
+ * аплоад** — той самий підхід, що вже на `/settings` для фото профілю
+ * (`AVATAR_MAX_SIZE_BYTES`/`AVATAR_ALLOWED_MIME_TYPES`,
+ * `modules/account/schema.ts`): 5MB, лише JPG/PNG/WebP
+ * (`COURSE_COVER_MAX_SIZE_BYTES`/`COURSE_COVER_ALLOWED_MIME_TYPES`,
+ * `modules/courses/schema.ts` — окрема константа з тим самим значенням,
+ * той самий принцип незалежності модулів, що вже в `CERTIFICATE_MAX_SIZE_BYTES`).
+ * Раніше документована причина URL-поля (задача 8.1.6, "у проєкті немає
+ * підключеного файлового сховища") уже НЕ актуальна — Cloudinary
+ * підключено ще в Фазі 3+ для аватарок, `lib/storage/courseCoverStorage.ts`
+ * лише переюзовує той самий Sharp-пайплайн (`processUploadedImage`).
+ *
+ * Форма НЕ передає `File` через `onSubmit(values)` — натомість сама
+ * збирає `FormData` (текстові поля + файл/прапорець видалення) і передає
+ * його в `onSubmit`, той самий підхід, що `modules/account/actions.ts::
+ * updateAvatarAction` вимагає від `app/settings/page.tsx` (Server Actions
+ * не серіалізують `File` як звичайний аргумент). Клієнтська перевірка
+ * файлу ПЕРЕД відправкою — `validateFileBeforeUpload`
+ * (`lib/images/validateFileBeforeUpload.ts`), та сама функція, що вже на
+ * `/settings` — лише зручність, реальна перевірка на сервері
+ * (`validateCourseCoverFile`, `modules/courses/service.ts`) лишається
+ * єдиним джерелом істини.
  */
 export function CourseForm({
   initial,
@@ -69,6 +100,20 @@ export function CourseForm({
   const [errors, setErrors] = useState<Partial<Record<"title" | "description", string>>>(
     {},
   );
+
+  // Прев'ю обкладинки: URL вже завантаженого файлу (редагування) АБО
+  // локальний `URL.createObjectURL` щойно вибраного файлу — той самий
+  // принцип, що `avatarPreview` на `/settings`. `coverFile` — сам `File`
+  // для відправки; `coverRemoved` — окремий прапорець (не просто
+  // "coverPreview === null"), бо `null` тут означає і "нічого не обирали",
+  // і "щойно прибрали" — без нього "Прибрати обкладинку" не мало б
+  // видимого ефекту на існуючому курсі при збереженні.
+  const [coverPreview, setCoverPreview] = useState<string | null>(
+    initial?.coverImage ?? null,
+  );
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverRemoved, setCoverRemoved] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);
 
   function update<K extends keyof CourseFormValues>(key: K, value: CourseFormValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -86,15 +131,56 @@ export function CourseForm({
     return Object.keys(nextErrors).length === 0;
   }
 
+  function handleCoverFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // дозволяє повторно вибрати той самий файл наступного разу
+    if (!file) return;
+
+    const validationError = validateFileBeforeUpload(file, {
+      maxSizeBytes: COURSE_COVER_MAX_SIZE_BYTES,
+      allowedMimeTypes: COURSE_COVER_ALLOWED_MIME_TYPES,
+      ...COVER_ERROR_MESSAGES,
+    });
+    if (validationError) {
+      setCoverError(validationError);
+      return;
+    }
+
+    setCoverError(null);
+    setCoverRemoved(false);
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
+  }
+
+  function handleCoverRemove() {
+    setCoverError(null);
+    setCoverFile(null);
+    setCoverRemoved(true);
+    setCoverPreview(null);
+  }
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!validate()) return;
+
+    const formData = new FormData();
+    formData.append("title", values.title);
+    formData.append("description", values.description);
+    formData.append("introVideoUrl", values.trailerUrl);
+    formData.append("introDescription", values.introText);
+    formData.append("published", String(values.published));
+
+    if (coverFile) {
+      formData.append("coverImage", coverFile);
+    } else if (coverRemoved) {
+      formData.append("removeCoverImage", "true");
+    }
+
+    onSubmit(formData);
+  }
+
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!validate()) return;
-        onSubmit(values);
-      }}
-      className="flex flex-col gap-5"
-    >
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       <Input
         label="Назва курсу"
         placeholder="Введіть назву"
@@ -130,12 +216,45 @@ export function CourseForm({
         onChange={(e) => update("trailerUrl", e.target.value)}
       />
 
-      <Input
-        label="Обкладинка (URL зображення)"
-        placeholder="https://images.example.com/cover.jpg"
-        value={values.coverImage}
-        onChange={(e) => update("coverImage", e.target.value)}
-      />
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-medium text-ink">Обкладинка курсу</label>
+        {coverPreview ? (
+          <div className="relative overflow-hidden rounded-xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={coverPreview} alt="" className="h-48 w-full object-cover" />
+            <button
+              type="button"
+              onClick={handleCoverRemove}
+              aria-label="Прибрати обкладинку"
+              className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-ink/60 text-white hover:bg-ink/80"
+            >
+              <CloseIcon size={14} />
+            </button>
+            <label className="absolute bottom-3 left-3 cursor-pointer rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-ink shadow-sm hover:bg-white">
+              Замінити зображення
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleCoverFileChange}
+              />
+            </label>
+          </div>
+        ) : (
+          <label className="flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border border-dashed border-rose-line/60 bg-cream-soft/40 px-6 py-8 text-center transition-colors hover:border-accent">
+            <UploadIcon size={20} className="text-accent-dark" />
+            <p className="text-sm text-ink">Перетягніть файл або натисніть, щоб завантажити</p>
+            <p className="text-xs text-muted">JPG, PNG або WebP, максимум 5MB.</p>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleCoverFileChange}
+            />
+          </label>
+        )}
+        {coverError && <p className="text-sm text-danger">{coverError}</p>}
+      </div>
 
       <div className="flex items-center gap-3">
         <Switch

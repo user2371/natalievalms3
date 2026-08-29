@@ -1,11 +1,40 @@
 import { slugify } from "@/lib/utils";
 import {
+  COURSE_COVER_ALLOWED_MIME_TYPES,
+  COURSE_COVER_MAX_SIZE_BYTES,
   CreateCourseInput,
   CreateCourseSchema,
   UpdateCourseInput,
   UpdateCourseSchema,
 } from "./schema";
 import * as repository from "./repository";
+
+/**
+ * Дешева серверна валідація файлу обкладинки курсу — ПЕРЕД
+ * `saveCourseCover` (`lib/storage/courseCoverStorage.ts`), той самий
+ * принцип поділу відповідальності й той самий рівень перевірки
+ * (розмір + заявлений `file.type`), що вже в `modules/account/
+ * service.ts::validateAvatarFile`: перший, дешевий UX-шар, а не
+ * заміна реальної перевірки вмісту файлу (`processUploadedImage`,
+ * викликається всередині `saveCourseCover`).
+ */
+export function validateCourseCoverFile(file: File): void {
+  if (file.size === 0) {
+    throw new Error("Файл порожній");
+  }
+
+  if (
+    !COURSE_COVER_ALLOWED_MIME_TYPES.includes(
+      file.type as (typeof COURSE_COVER_ALLOWED_MIME_TYPES)[number],
+    )
+  ) {
+    throw new Error("Дозволені лише зображення у форматі JPG, PNG або WebP");
+  }
+
+  if (file.size > COURSE_COVER_MAX_SIZE_BYTES) {
+    throw new Error("Розмір файлу перевищує 5MB");
+  }
+}
 
 /**
  * `modules/courses/service.ts` (задача 3.3) — бізнес-логіка та валідація
@@ -43,7 +72,19 @@ export async function getCourseByIdService(id: string) {
   return repository.findCourseById(id);
 }
 
-export async function createCourseService(input: CreateCourseInput) {
+export async function createCourseService(
+  input: CreateCourseInput,
+  /**
+   * `id` — не вводиться адміном і НЕ входить у `CreateCourseSchema`
+   * (звичайний user input завжди йде через zod): це внутрішній
+   * `crypto.randomUUID()`, згенерований у `actions.ts::createCourseAction`
+   * ДО створення запису — лише тоді, коли адмін одразу завантажує файл
+   * обкладинки, щоб `saveCourseCover` (стабільний `public_id =
+   * course-covers/{courseId}`, той самий принцип, що вже в
+   * `avatarStorage.ts`) мав курс-id ще до вставки рядка в БД.
+   */
+  options?: { id?: string },
+) {
   const parsed = CreateCourseSchema.safeParse(input);
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message || "Некоректні дані курсу");
@@ -52,6 +93,7 @@ export async function createCourseService(input: CreateCourseInput) {
   const slug = await generateUniqueSlug(parsed.data.title);
 
   return repository.createCourse({
+    id: options?.id,
     slug,
     title: parsed.data.title,
     description: parsed.data.description,

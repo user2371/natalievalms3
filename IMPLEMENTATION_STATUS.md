@@ -4585,3 +4585,110 @@ install && npx prisma generate && npx tsc --noEmit && npx eslint .
 `HomeworkAssignment`, і застосувати міграцію
 `20260828120000_homework_assignments` до бази).
 
+## ФАЗА IND+ — Індикатор наявності статті/квізу у формі уроку (29.08.2026, РЕАЛІЗОВАНО)
+
+**Проблема:** на сторінці редагування уроку кнопки "Додати статтю" і
+"Налаштувати квіз" не показували, чи стаття/квіз уже додані — треба
+було натиснути й відкрити окрему сторінку, щоб дізнатись. Домашнє
+завдання (`HW+.3.3`) вже мало правильну поведінку через
+`hasHomeworkAssignment`; для статті логіка умовного напису кнопки в
+`LessonForm.tsx` існувала, але спиралась на поле форми `articleText`,
+яке `AdminEditLessonForm.tsx` ніколи не заповнювало реальними даними
+(завжди `""`) — тому кнопка завжди писала "Додати статтю". Для квізу
+такого напису не було взагалі.
+
+- **IND+.1** — `components/admin/LessonForm.tsx`: нові опційні пропи
+  `hasArticle`/`hasQuiz` (той самий принцип, що вже наявний
+  `hasHomeworkAssignment`); напис кнопки статті тепер керується
+  `hasArticle`, а не мертвим `values.articleText` (поле `articleText`
+  прибрано з `LessonFormValues`/`EMPTY` — воно ніде не записувалося).
+  Кнопка квізу отримала той самий умовний напис ("Додати квіз"/
+  "Редагувати квіз" замість статичного "Налаштувати квіз") та іконку
+  `EditIcon`, як стаття й ДЗ. Новий компонент `AddedBadge` — компактний
+  бейдж "Додано" (`CheckIcon` + `bg-success/10 text-success`, той самий
+  колірний токен `--color-success`, що вже в `app/globals.css`),
+  рендериться біля підпису блоку (стаття/квіз/ДЗ) лише коли відповідний
+  `has*` === true; додано й до блоку ДЗ, щоб усі три виглядали
+  однаково.
+- **IND+.2** — `components/admin/AdminEditLessonForm.tsx`: нові пропи
+  `hasArticle: boolean`, `hasQuiz: boolean`, прокинуті в `LessonForm`.
+- **IND+.3** — `app/admin/courses/[courseId]/lessons/[lessonId]/edit/page.tsx`:
+  додано `getArticleByLessonIdService`/`getQuizQuestionsForLessonService`
+  в той самий `Promise.all`, що вже мав `getHomeworkAssignmentByLessonIdService`.
+  `hasArticle` — `Boolean(article && article.contentJson.trim())` (та
+  сама перевірка "непорожня стаття", що вже на сторінці уроку студента).
+  `hasQuiz` — `Boolean(quizQuestions)`, бо `getQuizQuestionsForLessonService`
+  вже повертає `null`, коли квізу немає або в ньому нуль питань.
+
+Сторінку створення нового уроку (`.../lessons/new/page.tsx`) свідомо не
+чіпали — там стаття/квіз/ДЗ і так недоступні до збереження уроку.
+
+**Перевірка:** `npx eslint` на трьох змінених файлах — 0
+помилок/попереджень. `npx tsc --noEmit` (весь проєкт, як і в
+попередніх фазах, НЕ типчекається повністю в сендбоксі — `prisma
+generate` не зміг завантажити engine-бінарник, `binaries.prisma.sh`
+поза дозволеним мережевим списком, `403 Forbidden`) — на трьох
+змінених файлах: 0 помилок (спершу було 4 помилки `TS2304` через
+пропущену деструктуризацію `hasArticle`/`hasQuiz` у сигнатурі
+`LessonForm` — виправлено й перевірено повторно). Рекомендація та сама,
+що в попередніх фазах — прогнати повний `npm install && npx prisma
+generate && npx tsc --noEmit && npx eslint . --max-warnings=0` з
+мережею перед деплоєм.
+
+## ФАЗА FIXES — F.29: обкладинка курсу — файл-аплоад замість URL-поля (29.08.2026, РЕАЛІЗОВАНО)
+
+**Прохання користувача:** "Зроби щоб обкладинку для курсу можна було
+загружати як файл з усіма тими самими правилами що і для аватарки (а
+не просто url в адмінці)".
+
+**Рішення:** перевикористано ту саму інфраструктуру, що вже для
+аватарки (Cloudinary, `processUploadedImage`, 5MB/JPG-PNG-WebP) —
+детальний список змінених файлів і задач `F.29.1`–`F.29.8` у
+`TASKS_DETAILED.md`. Головна архітектурна відмінність від аватарки:
+`Course.id` при СТВОРЕННІ ще не існує на момент вибору файлу в UI —
+розв'язано генерацією `courseId = randomUUID()` у
+`createCourseAction` ДО виклику `createCourseService` (якому додано
+опційний другий аргумент `{ id }`, прокинутий аж до
+`prisma.course.create`), щоб `public_id` у Cloudinary й `Course.id` у
+БД завжди збігались і `overwrite: true` (один слот на курс, як на
+юзера для аватарки) працював однаково і при створенні, і при
+редагуванні. `createCourseAction`/`updateCourseAction` через це
+перейшли з типізованого об'єкта-аргументу на `FormData` (те саме
+обмеження Server Actions щодо серіалізації `File`, що вже задокументоване
+для `updateAvatarAction`).
+
+**Знайдений і виправлений побічний ефект:** зміна сигнатури
+`updateCourseAction` (об'єкт → `FormData`) зламала виклик у
+`components/admin/AdminCoursesTable.tsx::handleTogglePublished`
+(перемикач "Опубліковано" прямо в таблиці, задача 8.1.4) — цей
+виклик передавав старий типізований `{ id, published }` і НЕ
+проходив через `CourseForm`, тому не був очевидний при першому
+проході по файлах. Впіймано саме через `npx tsc --noEmit`
+(`TS2353: Object literal may only specify known properties, and 'id'
+does not exist in type 'FormData'`), а не вручну — підтверджує
+цінність повного прогону тайпчека навіть у сендбоксі з відомими
+обмеженнями Prisma. Виправлено: `handleTogglePublished` тепер збирає
+`FormData` з поточних значень курсу (`title`/`description`/
+`introVideoUrl`/`introDescription`/новий `published`), обкладинку не
+чіпає (ні `coverImage`, ні `removeCoverImage` не додаються — дія
+лишає її без змін).
+
+**Перевірка:** `npx eslint` на всіх змінених/нових файлах — 0
+помилок/попереджень. `npx tsc --noEmit` (той самий відомий сендбокс-
+виняток із `prisma generate` — `403 Forbidden` на
+`binaries.prisma.sh`, ті самі `TS7006` в файлах поза цією фазою, що
+вже задокументовані в попередніх ФАЗАХ) — на змінених файлах: 0
+помилок ПІСЛЯ виправлення `AdminCoursesTable.tsx` вище (до
+виправлення — рівно 1 помилка, `TS2353` у цьому файлі). Ручне
+наскрізне трасування типів/потоку даних (create → upload → DB insert
+з orphan-cleanup при провалі; update → upload з overwrite / явне
+видалення при `removeCoverImage`) — без мережі в сендбоксі неможливо
+реально завантажити файл у Cloudinary чи застосувати нову міграцію
+(вона й не потрібна — `Course.coverImage` лишається тим самим
+`String?`, жодної зміни Prisma-схеми). Рекомендація та сама, що в
+попередніх фазах — прогнати повний `npm install && npx prisma
+generate && npx tsc --noEmit && npx eslint . --max-warnings=0` з
+мережею, і наживо перевірити аплоад/заміну/видалення обкладинки в
+адмінці (`/admin/courses/new`, `/admin/courses/[id]/edit`) перед
+деплоєм.
+

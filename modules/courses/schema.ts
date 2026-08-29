@@ -14,6 +14,27 @@ import { z } from "zod";
  * тут відповідає моделі `Course` у `prisma/schema.prisma`, а не типу
  * `Course` з `lib/data/courses.ts` — два різні шари, змішувати не можна.
  */
+/**
+ * Правила файлу обкладинки курсу (задача, за прямим зверненням
+ * користувача — обкладинка курсу тепер завантажується як файл в
+ * адмінці, а не вводиться URL-рядком). Ті самі правила, що вже для
+ * аватарки користувача (`modules/account/schema.ts::
+ * AVATAR_MAX_SIZE_BYTES`/`AVATAR_ALLOWED_MIME_TYPES`): 5MB, JPG/PNG/
+ * WebP. Окрема константа зі своїм значенням (а не прямий імпорт з
+ * `modules/account`) — той самий принцип незалежності модулів, що вже
+ * прийнятий у проєкті для `CERTIFICATE_MAX_SIZE_BYTES`
+ * (`modules/certificates/schema.ts`), навіть коли числове значення
+ * збігається з іншим модулем.
+ */
+export const COURSE_COVER_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+
+export const COURSE_COVER_ALLOWED_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+] as const;
+export type CourseCoverAllowedMimeType = (typeof COURSE_COVER_ALLOWED_MIME_TYPES)[number];
+
 export const CreateCourseSchema = z.object({
   title: z.string().trim().min(3, "Назва курсу має містити мінімум 3 символи"),
   description: z.string().trim().min(10, "Опис курсу має містити мінімум 10 символів"),

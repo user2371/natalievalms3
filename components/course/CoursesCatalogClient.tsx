@@ -82,6 +82,7 @@ export function CoursesCatalogClient({
                 key={course.slug}
                 course={course}
                 href={realMatch ? `/courses/${realMatch.slug}` : undefined}
+                coverImageOverride={realMatch?.coverImage}
               />
             );
           })}

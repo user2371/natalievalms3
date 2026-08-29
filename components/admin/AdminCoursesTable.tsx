@@ -19,8 +19,10 @@ const PAGE_SIZE = 10;
  * `useState` для оптимістичних оновлень.
  *
  * - **8.1.4** — перемикач "Опубліковано" прямо в таблиці, без переходу на
- *   сторінку редагування: `updateCourseAction({ id, published: !поточне })`,
- *   optimistic-перемикання з відкатом при помилці.
+ *   сторінку редагування: `updateCourseAction(formData)` з `published`
+ *   перемкнутим (F.29: дія тепер приймає `FormData`, не типізований
+ *   об'єкт — див. `modules/courses/actions.ts`), optimistic-перемикання з
+ *   відкатом при помилці.
  * - **8.1.5** — видалення курсу з попередженням про каскад (усі уроки,
  *   прогрес і коментарі курсу видаляться разом з ним — `onDelete: Cascade`
  *   у Prisma-схемі для `Lesson.courseId`/`Progress`/`Comment`/`Enrollment`).
@@ -43,10 +45,19 @@ export function AdminCoursesTable({ initialCourses }: { initialCourses: Course[]
     );
 
     startTransition(async () => {
-      const result = await updateCourseAction({
-        id: course.id,
-        published: nextPublished,
-      });
+      const formData = new FormData();
+      formData.append("id", course.id);
+      formData.append("title", course.title);
+      formData.append("description", course.description);
+      formData.append("introVideoUrl", course.introVideoUrl ?? "");
+      formData.append("introDescription", course.introDescription ?? "");
+      formData.append("published", String(nextPublished));
+      // Обкладинку тут НЕ чіпаємо — ні `coverImage` (файл), ні
+      // `removeCoverImage` не додаються в `FormData`, тому
+      // `updateCourseAction` (`modules/courses/actions.ts`) лишає
+      // `coverImage` без змін (`undefined` — "не чіпати", той самий
+      // принцип, що вже в самій дії).
+      const result = await updateCourseAction(formData);
       if (!result.success) {
         setCourses((prev) =>
           prev.map((c) =>
