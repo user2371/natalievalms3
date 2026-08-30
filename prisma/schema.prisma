@@ -1,6 +1,14 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // CERTTPL+.4.1 (30.08.2026, за прямим проханням користувача) — Supabase
+  // pgbouncer (transaction mode, `DATABASE_URL`) не підтримує advisory
+  // locks/prepared statements, потрібні `prisma migrate`, тому окреме
+  // пряме з'єднання (порт 5432, без пулера) лише для `migrate deploy`/
+  // `migrate dev`/`db push`. Звичайні рантайм-запити застосунку й далі
+  // йдуть через `url` (pooler) без жодних змін — Prisma сама перемикає
+  // з'єднання залежно від команди, нічого руками перемикати не треба.
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {

@@ -6361,3 +6361,50 @@ generate && npx tsc --noEmit && npx eslint . --max-warnings=0` з
 мережею і наживо перевірити аплоад/заміну/видалення макета в адмінці
 та рендер сертифіката на `/certificates`/`/profile`/`/users/[id]`
 перед деплоєм.
+
+### CERTTPL+.4 Supabase: `directUrl` для міграцій (30.08.2026, окреме прохання)
+
+Не пов'язано з макетом сертифіката курсу вище — окреме пряме
+прохання користувача під час обговорення деплою: у Vercel вже
+передаються і `DATABASE_URL` (Supabase pooler/pgbouncer, transaction
+mode), і `DIRECT_URL` (пряме з'єднання, без пулера), але
+`prisma/schema.prisma::datasource db` використовував лише `url =
+env("DATABASE_URL")` — `DIRECT_URL` ніде не був прописаний і фактично
+ігнорувався Prisma.
+
+- [x] CERTTPL+.4.1 `prisma/schema.prisma`: `datasource db` доповнено
+      `directUrl = env("DIRECT_URL")`. Офіційна рекомендація Prisma
+      для Supabase — pgbouncer у transaction mode не підтримує
+      advisory locks/prepared statements, потрібні `prisma migrate`,
+      тому `migrate deploy`/`migrate dev`/`db push` мають йти через
+      пряме з'єднання (порт 5432), а звичайні рантайм-запити
+      застосунку (Next.js через `PrismaClient`) — і далі через `url`
+      (pooler, порт 6543). З доданим `directUrl` Prisma перемикає
+      з'єднання САМА, залежно від команди — жодних змін у звичайному
+      робочому процесі (`prisma migrate deploy`, `prisma generate`)
+      не потрібно, обидві команди й далі викликаються так само, як і
+      раніше.
+
+**Чому це не було проблемою досі:** прості одностейтментні міграції
+(`ALTER TABLE ... ADD COLUMN`, як і всі наявні в цьому проєкті на
+момент цієї задачі) часто проходять через pgbouncer без помилок — це
+не гарантія на майбутнє, а радше "поки не траплялась складніша
+міграція" (кілька DDL-стейтментів в одному файлі, `CREATE INDEX
+CONCURRENTLY`, тощо, де advisory locks/prepared statements
+справді потрібні).
+
+**Дія потрібна від користувача:** переконатись, що `DIRECT_URL`
+прописаний і локально (`.env`), і на Vercel (за словами користувача —
+на Vercel вже передається). Після цієї зміни схеми — обов'язково один
+раз `npx prisma generate` (зміна `datasource`-блоку так само
+потребує regenerate клієнта, як і зміна моделей). Сам робочий процес
+деплою (`npx prisma migrate deploy && npx prisma generate && npm run
+build`, ФАЗА CERTTPL+ вище) — без змін.
+
+**Перевірка:** структурна — `directUrl` це стандартне, задокументоване
+поле Prisma `datasource`-блоку (`env("DIRECT_URL")`, той самий
+синтаксис, що вже `url`), без змін типів моделей чи потреби в новій
+міграції. `npx tsc --noEmit`/`npx eslint` не застосовні (зміна лише в
+`.prisma`-файлі, не в TS-коді). Реальне з'єднання через Supabase
+direct-URL — неможливо перевірити без мережі й реальних кредів у
+пісочниці, перевірка на боці користувача при наступному деплої.

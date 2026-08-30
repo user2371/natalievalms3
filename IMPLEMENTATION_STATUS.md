@@ -4762,3 +4762,24 @@ generate && npx tsc --noEmit && npx eslint . --max-warnings=0` з
 адмінці (`/admin/courses/new`, `/admin/courses/[id]/edit`) та рендер
 сертифіката (`/certificates`, `/profile`, `/users/[id]`) перед
 деплоєм.
+
+## ФАЗА CERTTPL+.4 — Supabase `directUrl` для міграцій (30.08.2026, РЕАЛІЗОВАНО)
+
+**Прохання користувача** (окреме, під час обговорення деплою на
+Vercel): підтвердив, що вже передає і `DATABASE_URL` (Supabase
+pooler), і `DIRECT_URL` на Vercel, попросив підкоригувати схему.
+
+**Проблема:** `prisma/schema.prisma::datasource db` мав лише `url =
+env("DATABASE_URL")` — `DIRECT_URL`, хоч і переданий на Vercel, ніде
+не використовувався Prisma.
+
+**Рішення:** додано `directUrl = env("DIRECT_URL")` у `datasource
+db` — стандартна офіційна рекомендація Prisma для Supabase (pgbouncer
+у transaction mode не підтримує advisory locks/prepared statements,
+потрібні `migrate deploy`/`migrate dev`; звичайні запити застосунку
+й далі йдуть через pooler `url`, без змін). Деталі — `CERTTPL+.4.1` у
+`TASKS_DETAILED.md`.
+
+**Дія від користувача:** переконатись, що `DIRECT_URL` є і локально
+(`.env`), не лише на Vercel; один раз прогнати `npx prisma generate`
+після цієї зміни схеми.
