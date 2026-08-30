@@ -11,6 +11,8 @@ import { validateFileBeforeUpload } from "@/lib/images/validateFileBeforeUpload"
 import {
   COURSE_COVER_ALLOWED_MIME_TYPES,
   COURSE_COVER_MAX_SIZE_BYTES,
+  COURSE_CERTIFICATE_ALLOWED_MIME_TYPES,
+  COURSE_CERTIFICATE_MAX_SIZE_BYTES,
 } from "@/modules/courses";
 
 export interface CourseFormValues {
@@ -24,8 +26,15 @@ export interface CourseFormValues {
 }
 
 export interface CourseFormProps {
-  /** `coverImage` — URL уже завантаженої обкладинки (для редагування), окремо від решти текстових полів. */
-  initial?: Partial<CourseFormValues> & { coverImage?: string | null };
+  /**
+   * `coverImage` — URL уже завантаженої обкладинки (для редагування), окремо
+   * від решти текстових полів. `certificateImage` — той самий принцип
+   * (CERTTPL+.0.2) для макета сертифіката курсу.
+   */
+  initial?: Partial<CourseFormValues> & {
+    coverImage?: string | null;
+    certificateImage?: string | null;
+  };
   onCancel: () => void;
   /** Готова `FormData` (текстові поля + опційний файл обкладинки/прапорець видалення) — форма сама збирає її з внутрішнього стану. */
   onSubmit: (formData: FormData) => void;
@@ -48,6 +57,12 @@ const EMPTY: CourseFormValues = {
 
 const COVER_ERROR_MESSAGES = {
   maxSizeErrorMessage: "Розмір файлу перевищує 5MB",
+  formatErrorMessage: "Дозволені лише зображення у форматі JPG, PNG або WebP",
+};
+
+/** CERTTPL+.0.2 — той самий підхід, що `COVER_ERROR_MESSAGES` вище, лише інший ліміт розміру (10MB, як у макета сертифіката). */
+const CERTIFICATE_ERROR_MESSAGES = {
+  maxSizeErrorMessage: "Розмір файлу перевищує 10MB",
   formatErrorMessage: "Дозволені лише зображення у форматі JPG, PNG або WebP",
 };
 
@@ -91,6 +106,24 @@ const COVER_ERROR_MESSAGES = {
  * `/settings` — лише зручність, реальна перевірка на сервері
  * (`validateCourseCoverFile`, `modules/courses/service.ts`) лишається
  * єдиним джерелом істини.
+ *
+ * ФАЗА CERTTPL+ (30.08.2026, за прямим проханням користувача — "зроби
+ * щоб в адмінці після створення курсу можна було додавати завантажити
+ * зображення сертифікату(але якщо не додати то додасться стандартний
+ * макет сертифікату")): додано окремий, повністю опційний блок "Макет
+ * сертифіката" — той самий файловий аплоад-патерн, що "Обкладинка
+ * курсу" вище (окремий стан прев'ю/файлу/прапорця видалення, окреме
+ * поле `certificateImage`/`removeCertificateImage` у `FormData`), лише
+ * інший ліміт розміру (10MB, `COURSE_CERTIFICATE_MAX_SIZE_BYTES`) і
+ * своя допоміжна фраза в порожньому стані. Якщо адмін нічого не
+ * завантажує — поле лишається `NULL`, і `CertificateCard`/
+ * `CertificateThumbnail` (`components/certificates/`) і далі малюють
+ * поточний намальований SVG-"папір" (без змін у цій фазі); якщо
+ * завантажує — САМЕ ЦЕ зображення рендериться замість нього для
+ * КОЖНОГО системного сертифіката цього курсу (без персоналізації
+ * іменем — це готовий макет, не шаблон для підстановки тексту, той
+ * самий принцип, що вже для завантажених користувачами сертифікатів,
+ * CERT+.1).
  */
 export function CourseForm({
   initial,
@@ -118,6 +151,15 @@ export function CourseForm({
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverRemoved, setCoverRemoved] = useState(false);
   const [coverError, setCoverError] = useState<string | null>(null);
+
+  // CERTTPL+.0.2 — той самий набір стану, що для обкладинки вище, лише для
+  // макета сертифіката курсу (окремий, повністю незалежний блок форми).
+  const [certificatePreview, setCertificatePreview] = useState<string | null>(
+    initial?.certificateImage ?? null,
+  );
+  const [certificateFile, setCertificateFile] = useState<File | null>(null);
+  const [certificateRemoved, setCertificateRemoved] = useState(false);
+  const [certificateError, setCertificateError] = useState<string | null>(null);
 
   function update<K extends keyof CourseFormValues>(key: K, value: CourseFormValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -184,6 +226,36 @@ export function CourseForm({
     setCoverPreview(null);
   }
 
+  // CERTTPL+.0.2 — той самий підхід, що `handleCoverFileChange`/
+  // `handleCoverRemove` вище, лише для макета сертифіката.
+  function handleCertificateFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    const validationError = validateFileBeforeUpload(file, {
+      maxSizeBytes: COURSE_CERTIFICATE_MAX_SIZE_BYTES,
+      allowedMimeTypes: COURSE_CERTIFICATE_ALLOWED_MIME_TYPES,
+      ...CERTIFICATE_ERROR_MESSAGES,
+    });
+    if (validationError) {
+      setCertificateError(validationError);
+      return;
+    }
+
+    setCertificateError(null);
+    setCertificateRemoved(false);
+    setCertificateFile(file);
+    setCertificatePreview(URL.createObjectURL(file));
+  }
+
+  function handleCertificateRemove() {
+    setCertificateError(null);
+    setCertificateFile(null);
+    setCertificateRemoved(true);
+    setCertificatePreview(null);
+  }
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!validate()) return;
@@ -204,6 +276,13 @@ export function CourseForm({
       formData.append("coverImage", coverFile);
     } else if (coverRemoved) {
       formData.append("removeCoverImage", "true");
+    }
+
+    // CERTTPL+.0.2 — той самий підхід, що обкладинка вище.
+    if (certificateFile) {
+      formData.append("certificateImage", certificateFile);
+    } else if (certificateRemoved) {
+      formData.append("removeCertificateImage", "true");
     }
 
     onSubmit(formData);
@@ -319,6 +398,54 @@ export function CourseForm({
           </label>
         )}
         {coverError && <p className="text-sm text-danger">{coverError}</p>}
+      </div>
+
+      {/* CERTTPL+.0.2 — той самий блок-патерн, що "Обкладинка курсу" вище, повністю опційний. */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-medium text-ink">Макет сертифіката</label>
+        {certificatePreview ? (
+          <div className="relative overflow-hidden rounded-xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={certificatePreview}
+              alt=""
+              className="h-48 w-full object-contain bg-cream-soft/40"
+            />
+            <button
+              type="button"
+              onClick={handleCertificateRemove}
+              aria-label="Прибрати макет сертифіката"
+              className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-ink/60 text-white hover:bg-ink/80"
+            >
+              <CloseIcon size={14} />
+            </button>
+            <label className="absolute bottom-3 left-3 cursor-pointer rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-ink shadow-sm hover:bg-white">
+              Замінити зображення
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleCertificateFileChange}
+              />
+            </label>
+          </div>
+        ) : (
+          <label className="flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border border-dashed border-rose-line/60 bg-cream-soft/40 px-6 py-8 text-center transition-colors hover:border-accent">
+            <UploadIcon size={20} className="text-accent-dark" />
+            <p className="text-sm text-ink">Перетягніть файл або натисніть, щоб завантажити</p>
+            <p className="text-xs text-muted">JPG, PNG або WebP, максимум 10MB.</p>
+            <p className="text-xs text-muted">
+              Якщо не завантажити — використається стандартний макет сертифіката з назвою курсу.
+            </p>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleCertificateFileChange}
+            />
+          </label>
+        )}
+        {certificateError && <p className="text-sm text-danger">{certificateError}</p>}
       </div>
 
       <div className="flex items-center gap-3">

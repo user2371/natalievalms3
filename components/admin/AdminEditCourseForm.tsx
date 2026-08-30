@@ -52,6 +52,7 @@ export function AdminEditCourseForm({ course }: { course: Course }) {
         trailerUrl: course.introVideoUrl ?? "",
         published: course.published,
         coverImage: course.coverImage ?? undefined,
+        certificateImage: course.certificateImage ?? undefined,
       }}
       onCancel={() => router.push(`/admin/courses/${course.id}`)}
       onSubmit={handleSubmit}

@@ -2,6 +2,8 @@ import { slugify } from "@/lib/utils";
 import {
   COURSE_COVER_ALLOWED_MIME_TYPES,
   COURSE_COVER_MAX_SIZE_BYTES,
+  COURSE_CERTIFICATE_ALLOWED_MIME_TYPES,
+  COURSE_CERTIFICATE_MAX_SIZE_BYTES,
   CreateCourseInput,
   CreateCourseSchema,
   UpdateCourseInput,
@@ -33,6 +35,32 @@ export function validateCourseCoverFile(file: File): void {
 
   if (file.size > COURSE_COVER_MAX_SIZE_BYTES) {
     throw new Error("Розмір файлу перевищує 5MB");
+  }
+}
+
+/**
+ * ФАЗА CERTTPL+.0.2 (30.08.2026) — дешева серверна валідація файлу
+ * макета сертифіката, ПЕРЕД `saveCertificateTemplate`
+ * (`lib/storage/certificateTemplateStorage.ts`). Локальна копія того
+ * самого принципу, що `validateCourseCoverFile` вище (не переюзана
+ * напряму — окремий модуль, окремі константи/повідомлення, той самий
+ * підхід незалежності модулів, що вже прийнятий у проєкті).
+ */
+export function validateCertificateTemplateFile(file: File): void {
+  if (file.size === 0) {
+    throw new Error("Файл порожній");
+  }
+
+  if (
+    !COURSE_CERTIFICATE_ALLOWED_MIME_TYPES.includes(
+      file.type as (typeof COURSE_CERTIFICATE_ALLOWED_MIME_TYPES)[number],
+    )
+  ) {
+    throw new Error("Дозволені лише зображення у форматі JPG, PNG або WebP");
+  }
+
+  if (file.size > COURSE_CERTIFICATE_MAX_SIZE_BYTES) {
+    throw new Error("Розмір файлу перевищує 10MB");
   }
 }
 
@@ -98,6 +126,7 @@ export async function createCourseService(
     title: parsed.data.title,
     description: parsed.data.description,
     coverImage: parsed.data.coverImage,
+    certificateImage: parsed.data.certificateImage,
     published: parsed.data.published,
     introVideoUrl: parsed.data.introVideoUrl,
     introDescription: parsed.data.introDescription,

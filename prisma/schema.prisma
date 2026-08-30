@@ -85,6 +85,18 @@ model Course {
   // в адмінці (`CourseForm`), без окремої таблиці.
   introTitle       String?
   introHighlights  String[] @default([])
+  // CERTTPL+.0.1 (30.08.2026) — власний макет сертифіката курсу, за
+  // прямим проханням користувача ("щоб в адмінці після створення курсу
+  // можна було додавати завантажити зображення сертифікату"). Cloudinary
+  // URL опційний — `NULL`, доки адмін нічого не завантажив. Немає
+  // окремого поля `certificateImagePublicId` (на відміну від
+  // `Certificate.imagePublicId` для CERT+): `public_id` тут завжди
+  // стабільно виводиться з `Course.id`
+  // (`certificate-templates/{courseId}`, `lib/storage/
+  // certificateTemplateStorage.ts`), тому зберігати його окремо не
+  // потрібно — той самий принцип, що вже в `coverImage`/`courseCoverStorage.ts`
+  // (публічний `public_id` теж не зберігається окремим полем).
+  certificateImage String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

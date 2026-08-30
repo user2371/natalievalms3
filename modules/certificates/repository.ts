@@ -41,12 +41,26 @@ export interface CertificateRow {
  * CERT+.1.1/CERT+.1.3); фолбек на порожній рядок — суто захист типів,
  * на практиці `title` для `UPLOADED` завжди заповнений (обов'язкове
  * поле `UploadCertificateSchema`).
+ *
+ * ФАЗА CERTTPL+.0.3 (30.08.2026) — `select` для `course` доповнено
+ * `certificateImage` (макет сертифіката курсу, `CourseForm.tsx`).
+ * `imageUrl` у відповіді нижче тепер `row.imageUrl ?? row.course?.
+ * certificateImage ?? null`: `row.imageUrl` (пряме поле
+ * `Certificate.imageUrl`) заповнене лише для `UPLOADED` і завжди
+ * `NULL` для `SYSTEM` (як і раніше), тому для `SYSTEM`-рядка вираз
+ * фактично зводиться до `row.course?.certificateImage ?? null` —
+ * власний Cloudinary-макет курсу, якщо адмін його завантажив, інакше
+ * `null` (як і до цієї фази — стандартний намальований SVG-"папір").
+ * Компонент рендеру (`CertificateCard`/`CertificateThumbnail`)
+ * вирішує, що показати, лише за наявністю `imageUrl`, більше не
+ * звіряючись із `source` — єдиний `??`-ланцюжок тут, а не два окремі
+ * `if` у кожному компоненті, щоб не дублювати цю логіку відбору.
  */
 export async function findAllForUser(userId: string): Promise<CertificateRow[]> {
   const rows = await prisma.certificate.findMany({
     where: { userId },
     orderBy: { issuedAt: "desc" },
-    include: { course: { select: { title: true } } },
+    include: { course: { select: { title: true, certificateImage: true } } },
   });
 
   return rows.map(
@@ -56,13 +70,13 @@ export async function findAllForUser(userId: string): Promise<CertificateRow[]> 
       source: "SYSTEM" | "UPLOADED";
       title: string | null;
       imageUrl: string | null;
-      course: { title: string } | null;
+      course: { title: string; certificateImage: string | null } | null;
     }) => ({
       id: row.id,
       courseName: row.course?.title ?? row.title ?? "",
       issuedAt: row.issuedAt,
       source: row.source === "UPLOADED" ? ("uploaded" as const) : ("system" as const),
-      imageUrl: row.imageUrl,
+      imageUrl: row.imageUrl ?? row.course?.certificateImage ?? null,
     }),
   );
 }

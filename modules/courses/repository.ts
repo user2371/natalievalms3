@@ -47,6 +47,8 @@ export interface CreateCourseData {
   title: string;
   description: string;
   coverImage?: string | null;
+  /** CERTTPL+.0.1 — той самий опційний підхід, що `coverImage` вище. */
+  certificateImage?: string | null;
   published?: boolean;
   introVideoUrl?: string | null;
   introDescription?: string | null;
@@ -65,6 +67,7 @@ export async function createCourse(data: CreateCourseData) {
       title: data.title,
       description: data.description,
       coverImage: data.coverImage ?? null,
+      certificateImage: data.certificateImage ?? null,
       published: data.published ?? false,
       introVideoUrl: data.introVideoUrl ?? null,
       introDescription: data.introDescription ?? null,
@@ -81,6 +84,8 @@ export interface UpdateCourseData {
   title?: string;
   description?: string;
   coverImage?: string | null;
+  /** CERTTPL+.0.1 — той самий опційний підхід, що `coverImage` вище. */
+  certificateImage?: string | null;
   published?: boolean;
   introVideoUrl?: string | null;
   introDescription?: string | null;

@@ -96,9 +96,15 @@ export interface CertificateEntry {
    */
   source: "system" | "uploaded";
   /**
-   * Cloudinary URL фото — лише для `source === "uploaded"`. `null` для
-   * `"system"` (там і далі рендериться SVG-"папір" з `courseName`, не
-   * фото — UI-компонент вирішує, що показати, за цим полем).
+   * Cloudinary URL фото. Для `source === "uploaded"` — фото, яке
+   * завантажив сам користувач. `null` для `"system"` — ЯКЩО адмін не
+   * завантажив власний макет сертифіката курсу; ФАЗА CERTTPL+.0.3
+   * (30.08.2026) — якщо завантажив (`Course.certificateImage`,
+   * `CourseForm.tsx`), тут теж буде НЕ `null` для `"system"`. У
+   * будь-якому з цих двох випадків рендериться фото (`imageUrl`); лише
+   * коли `null` — рендериться намальований SVG-"папір" з `courseName`
+   * (`CertificateVisual`). UI-компонент вирішує, що показати, лише за
+   * наявністю цього поля, більше не звіряючись із `source`.
    */
   imageUrl: string | null;
 }

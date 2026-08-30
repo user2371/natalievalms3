@@ -41,6 +41,13 @@ export interface CertificateThumbnailProps {
  * не повноцінна картка, на відміну від `CertificateCard`/CERT+.2.3) замість
  * намальованого SVG-вордмарку.
  *
+ * ФАЗА CERTTPL+.0.4 (30.08.2026) — умова рендеру фото (тут і в лайтбоксі
+ * нижче) змінена з `isUploaded && certificate.imageUrl` на просто
+ * `certificate.imageUrl`, той самий принцип і та сама причина, що вже
+ * задокументована в докблоці `CertificateCard.tsx` — `imageUrl` для
+ * `source === "system"` тепер теж може бути заповнений (власний макет
+ * сертифіката курсу, `CourseForm.tsx`).
+ *
  * CERT+.2.8 (09.08.2026, прохання користувача): клік по мініатюрі більше
  * НЕ веде на сторінку списку сертифікатів (це вже робить окрема кнопка
  * "Показати всі" поруч із секцією) — відкриває лайтбокс із великою версією
@@ -49,7 +56,6 @@ export interface CertificateThumbnailProps {
  */
 export function CertificateThumbnail({ certificate, holderName }: CertificateThumbnailProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const isUploaded = certificate.source === "uploaded";
 
   return (
     <>
@@ -60,7 +66,7 @@ export function CertificateThumbnail({ certificate, holderName }: CertificateThu
         aria-label={`Переглянути сертифікат «${certificate.courseName}» у великому розмірі`}
       >
         <div className="relative aspect-[3/2] w-full overflow-hidden rounded-lg border border-rose-line/50 bg-white p-1.5 shadow-sm transition-shadow group-hover:shadow-md">
-          {isUploaded && certificate.imageUrl ? (
+          {certificate.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={certificate.imageUrl}
@@ -113,7 +119,7 @@ export function CertificateThumbnail({ certificate, holderName }: CertificateThu
             <CloseIcon size={16} />
           </button>
         </div>
-        {isUploaded && certificate.imageUrl ? (
+        {certificate.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={certificate.imageUrl}

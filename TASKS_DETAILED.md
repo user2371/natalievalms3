@@ -6170,3 +6170,194 @@ index.ts`, що і в решті модулів проєкту (`CLAUDE.md`).
 deploy`/`prisma generate`/`tsc --noEmit`/`eslint` локально або в CI
 перед деплоєм, і саму SQL-міграцію (`20260829120000_site_settings_
 featured_course`) звірити з реальною Postgres-БД.
+
+## ФАЗА CERTTPL+ — Макет сертифіката курсу (30.08.2026)
+
+Пряме прохання користувача: "зроби щоб в адмінці після створення
+курсу можна було додавати завантажити зображення сертифікату (але
+якщо не додати то додасться стандартний макет сертифікату 'ви
+закінчили курс' і назвою курсу)".
+
+Той самий підхід і той самий поділ (schema/repository/service/actions
+для `modules/courses`, окремий Cloudinary-хелпер у `lib/storage/`), що
+вже прийнятий для обкладинки курсу у ФАЗІ FIXES (F.29) — нижче лише
+перелік конкретних кроків, без повторення вже задокументованих
+загальних принципів.
+
+### CERTTPL+.0 Схема БД
+
+- [x] CERTTPL+.0.1 `prisma/schema.prisma`: нове опційне поле
+      `Course.certificateImage String?` (Cloudinary URL, `NULL` — доки
+      адмін нічого не завантажив). Без окремого поля `public_id` — той
+      самий принцип, що вже в `coverImage` (стабільно виводиться з
+      `Course.id`, зберігати окремо не потрібно).
+      Нова міграція `20260830090000_course_certificate_image`
+      (`ALTER TABLE "Course" ADD COLUMN "certificateImage" TEXT;`).
+
+### CERTTPL+.0 Бекенд — `modules/courses`
+
+- [x] CERTTPL+.0.2 `modules/courses/schema.ts`:
+      - `COURSE_CERTIFICATE_MAX_SIZE_BYTES` (10MB — той самий ліміт,
+        що вже `CERTIFICATE_MAX_SIZE_BYTES` для завантажених
+        користувачами сертифікатів, CERT+.0.4: це фото готового
+        документа/макета, а не звичайна обкладинка-скріншот, тому
+        більший ліміт, ніж 5MB обкладинки курсу).
+      - `COURSE_CERTIFICATE_ALLOWED_MIME_TYPES` — JPG/PNG/WebP, той
+        самий набір, що всюди в проєкті.
+      - Окремі константи (не переюзані напряму з `modules/
+        certificates/schema.ts`) — той самий принцип незалежності
+        модулів, що вже прийнятий для `COURSE_COVER_MAX_SIZE_BYTES`.
+      - `certificateImage` — нове опційне поле (URL, `.url().
+        optional().nullable()`, той самий підхід, що `coverImage`) у
+        `CreateCourseSchema` і, транзитивно через `.partial()`, у
+        `UpdateCourseSchema`.
+      - `certificateImage: string | null` — нове поле в інтерфейсі
+        `Course`.
+- [x] CERTTPL+.0.3 `lib/storage/certificateTemplateStorage.ts` (новий
+      файл) — `saveCertificateTemplate(courseId, file):
+      Promise<string>`/`deleteCertificateTemplate(courseId):
+      Promise<void>`, той самий контракт-абстракція, що
+      `courseCoverStorage.ts::saveCourseCover`/`deleteCourseCover`:
+      - Окрема Cloudinary-папка `certificate-templates` (не змішувати
+        з `course-covers`).
+      - `public_id = certificate-templates/{courseId}`, `overwrite:
+        true` — один стабільний слот на курс.
+      - `processUploadedImage` перед завантаженням: `maxDimension:
+        2000` (той самий ліміт, що вже для завантажених користувачами
+        сертифікатів, CERT+.3.1, — це фото документа-макета, а не
+        звичайна обкладинка), `quality: 85`.
+- [x] CERTTPL+.0.4 `modules/courses/service.ts`:
+      - `validateCertificateTemplateFile(file)` — дешева серверна
+        перевірка розміру/заявленого MIME, ПЕРЕД
+        `saveCertificateTemplate` (реальна перевірка вмісту —
+        всередині `processUploadedImage`, як і для обкладинки).
+        Локальна копія принципу `validateCourseCoverFile`, окремі
+        повідомлення/константи.
+      - `createCourseService`/`updateCourseService` — прокинути
+        `certificateImage` з `parsed.data` у виклик
+        `repository.createCourse`/повертати в `rest` для
+        `repository.updateCourse` (без додаткової бізнес-логіки —
+        той самий шлях, що `coverImage`).
+- [x] CERTTPL+.0.5 `modules/courses/repository.ts`: `certificateImage`
+      додано в `CreateCourseData`/`UpdateCourseData` і безпосередньо в
+      `data` обʼєкт `prisma.course.create`/`prisma.course.update`.
+- [x] CERTTPL+.0.6 `modules/courses/actions.ts`:
+      - `createCourseAction`: читає `formData.get("certificateImage")`
+        (файл), за наявності — `validateCertificateTemplateFile` +
+        `courseId = courseId ?? randomUUID()` (той самий спільний
+        `courseId`, що вже генерується для обкладинки, — досить, щоб
+        хоч ОДИН із двох файлів був наданий, щоб згенерувати id
+        заздалегідь) + `saveCertificateTemplate(courseId, certFile)`.
+        Orphan-safety при провалі `createCourseService` ПІСЛЯ
+        успішного завантаження — `deleteCertificateTemplate(courseId)`
+        поруч із вже наявним `deleteCourseCover(courseId)` (обидва
+        виклики в окремих `try/catch`, помилка cleanup ігнорується,
+        щоб не приховати первинну помилку БД).
+      - `updateCourseAction`: той самий трьохстанний підхід, що вже
+        для `coverImage` (`undefined` — не чіпати, `null` — прибрати,
+        рядок — нове фото): нове поле форми
+        `formData.get("certificateImage")` (файл) і прапорець
+        `removeCertificateImage` (`"true"`) — за наявності файлу
+        `saveCertificateTemplate(id, certFile)` (перезаписує через
+        `overwrite: true`, без окремого delete-перед-upload); за
+        прапорцем без файлу — `deleteCertificateTemplate(id)` +
+        `certificateImage = null`; інакше — поле не додається у
+        виклик `service.updateCourseService` (лишається без змін).
+- [x] CERTTPL+.0.7 `modules/courses/index.ts`: реекспортувати
+      `COURSE_CERTIFICATE_MAX_SIZE_BYTES`/
+      `COURSE_CERTIFICATE_ALLOWED_MIME_TYPES` поруч із вже наявними
+      `COURSE_COVER_*`.
+
+### CERTTPL+.1 Фронтенд — адмінська форма курсу
+
+- [x] CERTTPL+.1.1 `components/admin/CourseForm.tsx`:
+      - Новий незалежний блок стану: `certificatePreview`/
+        `certificateFile`/`certificateRemoved`/`certificateError` —
+        той самий набір і той самий принцип, що вже `coverPreview`/
+        `coverFile`/`coverRemoved`/`coverError` (окремий від
+        обкладинки — адмін може змінити одне, не чіпаючи інше).
+      - `initial` проп розширено `certificateImage?: string | null`
+        (той самий підхід, що вже `coverImage` — не входить у
+        `CourseFormValues`, окреме поле саме для прев'ю при
+        редагуванні).
+      - `handleCertificateFileChange`/`handleCertificateRemove` —
+        дзеркальні копії `handleCoverFileChange`/`handleCoverRemove`,
+        клієнтська перевірка через `validateFileBeforeUpload` з
+        лімітами `COURSE_CERTIFICATE_MAX_SIZE_BYTES`/
+        `COURSE_CERTIFICATE_ALLOWED_MIME_TYPES`.
+      - `handleSubmit`: якщо є `certificateFile` —
+        `formData.append("certificateImage", certificateFile)`;
+        інакше якщо `certificateRemoved` —
+        `formData.append("removeCertificateImage", "true")` (той
+        самий підхід, що вже для обкладинки).
+      - Новий блок розмітки "Макет сертифіката" одразу після блоку
+        "Обкладинка курсу": той самий UI-патерн (превʼю/drag-n-drop
+        плейсхолдер/кнопка "Замінити зображення"/кнопка прибрати), з
+        додатковим підказковим рядком у порожньому стані — "Якщо не
+        завантажити — використається стандартний макет сертифіката з
+        назвою курсу" (прямо відповідає формулюванню прохання
+        користувача).
+- [x] CERTTPL+.1.2 `components/admin/AdminEditCourseForm.tsx`:
+      прокинути `certificateImage: course.certificateImage ??
+      undefined` в `initial`, поруч із вже наявним `coverImage`.
+- [x] CERTTPL+.1.3 `app/admin/courses/new/page.tsx` — БЕЗ змін:
+      сторінка вже передає готову `FormData` як є в
+      `createCourseAction`, нове поле форми підхоплюється автоматично.
+
+### CERTTPL+.2 Роздача: рендер власного макета замість дефолтного SVG
+
+- [x] CERTTPL+.2.1 `modules/certificates/repository.ts::findAllForUser`:
+      - `select` для `course` доповнено `certificateImage: true`.
+      - Формула `imageUrl` змінена з `row.imageUrl` на `row.imageUrl
+        ?? row.course?.certificateImage ?? null`. `row.imageUrl` (пряме
+        поле `Certificate.imageUrl`) заповнене лише для `UPLOADED` і
+        завжди `NULL` для `SYSTEM` — тому для `SYSTEM`-рядка вираз
+        фактично зводиться до `row.course?.certificateImage ?? null`:
+        власний макет курсу, якщо є, інакше `null` (як і до цієї
+        фази).
+- [x] CERTTPL+.2.2 `modules/certificates/schema.ts` — докоментовано
+      `CertificateEntry.imageUrl` (тепер може бути заповнений і для
+      `"system"`, не лише `"uploaded"`), без зміни самого типу (уже
+      `string | null`).
+- [x] CERTTPL+.2.3 `components/certificates/CertificateCard.tsx` — умова
+      рендеру фото (картка + лайтбокс, 2 місця) змінена з
+      `isUploaded && certificate.imageUrl` на просто
+      `certificate.imageUrl`: тепер це "чи є фото взагалі", а не "чи
+      це завантажений користувачем сертифікат". Бейдж
+      "Отримано"/"Завантажено" й кнопки "Завантажити"/"Поділитись"/
+      "Видалити" й далі залежать від `isUploaded` (`source`) —
+      незмінно, це окреме питання "чий сертифікат і що з ним можна
+      робити", а не "яке зображення показати".
+- [x] CERTTPL+.2.4 `components/certificates/CertificateThumbnail.tsx` —
+      той самий перехід (мініатюра + лайтбокс, 2 місця), той самий
+      принцип.
+
+### CERTTPL+.3 Свідомо поза межами
+
+- Персоналізація власного макета (підстановка імені студента/дати
+  поверх завантаженого зображення, canvas-overlay) — прохання
+  користувача стосувалось лише самого факту завантаження готового
+  зображення; дефолтний намальований макет і далі єдиний, що показує
+  ім'я студента (`CertificateVisual`, `holderName`).
+- Прев'ю макета сертифіката "як він виглядатиме на реальному
+  сертифікаті" прямо в адмінці при завантаженні — наразі просто
+  показується сам файл (`object-contain`), без додаткового
+  оздоблення/рамки; той самий рівень прев'ю, що вже для обкладинки
+  курсу.
+- Кнопки "Завантажити"/"Поділитись" на `/certificates` (`CertificateCard`)
+  для `SYSTEM`-сертифіката з власним макетом — лишаються без реальної
+  логіки, як і до цієї фази (задокументовано ще в докблоці `0.14`,
+  поза межами цього прохання).
+
+**Статус: CERTTPL+.0–CERTTPL+.2 РЕАЛІЗОВАНО (30.08.2026).** Не
+прогнано в сендбоксі: `prisma migrate deploy`/`prisma generate` проти
+реальної Postgres-БД (немає мережі до `binaries.prisma.sh` — той
+самий відомий бар'єр, що й у попередніх фазах) і реальне завантаження
+файлу в Cloudinary. `npx tsc --noEmit` (з `npm install` — мережа до
+`registry.npmjs.org` доступна) прогнано по всьому проєкту — 0 нових
+помилок від змін цієї фази. Рекомендація та сама, що в попередніх
+фазах: прогнати повний `npx prisma migrate deploy && npx prisma
+generate && npx tsc --noEmit && npx eslint . --max-warnings=0` з
+мережею і наживо перевірити аплоад/заміну/видалення макета в адмінці
+та рендер сертифіката на `/certificates`/`/profile`/`/users/[id]`
+перед деплоєм.

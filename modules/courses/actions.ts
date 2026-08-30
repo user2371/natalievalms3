@@ -4,7 +4,11 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { saveCourseCover, deleteCourseCover } from "@/lib/storage/courseCoverStorage";
-import { validateCourseCoverFile } from "./service";
+import {
+  saveCertificateTemplate,
+  deleteCertificateTemplate,
+} from "@/lib/storage/certificateTemplateStorage";
+import { validateCourseCoverFile, validateCertificateTemplateFile } from "./service";
 import * as service from "./service";
 
 /**
@@ -65,24 +69,38 @@ export async function createCourseAction(formData: FormData) {
 
     const fields = readCourseFormFields(formData);
     const file = formData.get("coverImage");
+    // CERTTPL+.0.2 — той самий підхід, що `coverImage` вище, окреме поле форми.
+    const certFile = formData.get("certificateImage");
 
     let coverImage: string | null = null;
-    // Задається лише коли адмін одразу завантажує файл обкладинки —
-    // `courseId` генерується ТУТ, до вставки рядка в БД, щоб
-    // `saveCourseCover` (стабільний `public_id`, `overwrite: true`,
-    // той самий принцип, що вже в `avatarStorage.ts`) мав курс-id ще
-    // до створення самого запису.
+    let certificateImage: string | null = null;
+    // Задається лише коли адмін одразу завантажує файл обкладинки
+    // і/або макета сертифіката — `courseId` генерується ТУТ, до
+    // вставки рядка в БД, щоб `saveCourseCover`/`saveCertificateTemplate`
+    // (стабільний `public_id`, `overwrite: true`, той самий принцип,
+    // що вже в `avatarStorage.ts`) мали курс-id ще до створення самого
+    // запису. Один спільний `courseId` для ОБОХ файлів — досить, щоб
+    // хоч один із них був наданий.
     let courseId: string | undefined;
 
     if (file instanceof File && file.size > 0) {
       validateCourseCoverFile(file);
       courseId = randomUUID();
+    }
+    if (certFile instanceof File && certFile.size > 0) {
+      validateCertificateTemplateFile(certFile);
+      courseId = courseId ?? randomUUID();
+    }
+    if (file instanceof File && file.size > 0 && courseId) {
       coverImage = await saveCourseCover(courseId, file);
+    }
+    if (certFile instanceof File && certFile.size > 0 && courseId) {
+      certificateImage = await saveCertificateTemplate(courseId, certFile);
     }
 
     try {
       const course = await service.createCourseService(
-        { ...fields, coverImage },
+        { ...fields, coverImage, certificateImage },
         { id: courseId },
       );
       revalidatePath("/admin/courses");
@@ -91,16 +109,21 @@ export async function createCourseAction(formData: FormData) {
       return { success: true as const, course, error: null };
     } catch (dbErr) {
       // Orphan-safety (той самий принцип, що вже в `modules/account/
-      // actions.ts::updateAvatarAction`): файл уже завантажено в
+      // actions.ts::updateAvatarAction`): файл(и) уже завантажено в
       // Cloudinary, але запис курсу в БД не вдалось створити (напр.
       // серверна валідація `CreateCourseSchema` впала) — видаляємо
-      // сирітський файл, щоб він не лишався прив'язаним до `courseId`,
-      // який ніколи не стане реальним курсом.
+      // сирітські файли, щоб вони не лишались прив'язаними до
+      // `courseId`, який ніколи не стане реальним курсом.
       if (courseId) {
         try {
           await deleteCourseCover(courseId);
         } catch {
           // ігноруємо — не приховувати первинну помилку через відмову cleanup
+        }
+        try {
+          await deleteCertificateTemplate(courseId);
+        } catch {
+          // ігноруємо
         }
       }
       throw dbErr;
@@ -123,10 +146,15 @@ export async function updateCourseAction(formData: FormData) {
     const fields = readCourseFormFields(formData);
     const file = formData.get("coverImage");
     const removeCoverImage = formData.get("removeCoverImage") === "true";
+    // CERTTPL+.0.2 — той самий підхід, що обкладинка вище, окреме поле форми.
+    const certFile = formData.get("certificateImage");
+    const removeCertificateImage = formData.get("removeCertificateImage") === "true";
 
-    // `undefined` — обкладинку не чіпаємо (адмін нічого не змінював у
-    // цьому блоці форми); `null` — явно прибрати; рядок — нове фото.
+    // `undefined` — обкладинку/макет не чіпаємо (адмін нічого не
+    // змінював у цьому блоці форми); `null` — явно прибрати; рядок —
+    // нове фото.
     let coverImage: string | null | undefined;
+    let certificateImage: string | null | undefined;
 
     if (file instanceof File && file.size > 0) {
       validateCourseCoverFile(file);
@@ -140,10 +168,22 @@ export async function updateCourseAction(formData: FormData) {
       coverImage = null;
     }
 
+    if (certFile instanceof File && certFile.size > 0) {
+      validateCertificateTemplateFile(certFile);
+      // `public_id = certificate-templates/{id}` уже стабільний —
+      // `overwrite: true` сам замінює попередній макет, той самий
+      // принцип, що обкладинка вище.
+      certificateImage = await saveCertificateTemplate(id, certFile);
+    } else if (removeCertificateImage) {
+      await deleteCertificateTemplate(id);
+      certificateImage = null;
+    }
+
     const course = await service.updateCourseService({
       id,
       ...fields,
       ...(coverImage !== undefined ? { coverImage } : {}),
+      ...(certificateImage !== undefined ? { certificateImage } : {}),
     });
 
     revalidatePath("/admin/courses");

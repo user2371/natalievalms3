@@ -62,6 +62,17 @@ export interface CertificateCardProps {
  * як і в самій картці), просто в більшому контейнері — окремого
  * "оригінального" URL немає. Для `system` — той самий SVG-"папір", просто
  * у більшій картці.
+ *
+ * ФАЗА CERTTPL+.0.4 (30.08.2026) — умова рендеру фото ЗМІНЕНА з
+ * `isUploaded && certificate.imageUrl` на просто `certificate.imageUrl`
+ * (в обох місцях: картка й лайтбокс нижче). Причина: `certificate.
+ * imageUrl` для `source === "system"` тепер теж може бути заповнений
+ * (`modules/certificates/repository.ts::findAllForUser` — власний
+ * макет сертифіката курсу, завантажений адміном у `CourseForm.tsx`,
+ * якщо такий є). Бейдж "Отримано"/"Завантажено" й кнопки нижче й далі
+ * залежать саме від `isUploaded` (`source`), не від `imageUrl` — це два
+ * незалежні питання: "яке зображення показати" (за `imageUrl`) і "чий
+ * це сертифікат і що з ним можна робити" (за `source`).
  */
 export function CertificateCard({
   certificate,
@@ -102,7 +113,7 @@ export function CertificateCard({
         className="group relative block w-full cursor-zoom-in rounded-xl text-left"
         aria-label={`Переглянути сертифікат «${certificate.courseName}» у великому розмірі`}
       >
-        {isUploaded && certificate.imageUrl ? (
+        {certificate.imageUrl ? (
           <div className="relative aspect-[3/2] overflow-hidden rounded-xl border border-rose-line/50 bg-rose-soft/20">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -222,7 +233,7 @@ export function CertificateCard({
             <CloseIcon size={16} />
           </button>
         </div>
-        {isUploaded && certificate.imageUrl ? (
+        {certificate.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={certificate.imageUrl}
