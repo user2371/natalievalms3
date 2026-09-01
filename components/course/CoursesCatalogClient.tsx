@@ -6,7 +6,7 @@ import { RealCourseCard } from "@/components/course/RealCourseCard";
 import { Button } from "@/components/ui/Button";
 import { GraduationCapIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
-import { COURSES, COURSE_FILTERS, type CourseCategory } from "@/lib/data/courses";
+import { COURSES } from "@/lib/data/courses";
 import type { Course as RealCourse } from "@/modules/courses";
 
 export interface CoursesCatalogClientProps {
@@ -30,19 +30,41 @@ export function CoursesCatalogClient({
   realCourses,
   realLessonCountsByCourseId,
 }: CoursesCatalogClientProps) {
-  const [category, setCategory] = useState<CourseCategory | "all">("all");
-
-  const filteredStaticCourses = useMemo(() => {
-    if (category === "all") return COURSES;
-    return COURSES.filter((course) => course.category === category);
-  }, [category]);
+  const [category, setCategory] = useState<string>("all");
 
   const staticSlugs = useMemo(() => new Set(COURSES.map((c) => c.slug)), []);
-  // Реальні курси без відповідника серед статичних — показуються лише при
-  // фільтрі "Усі" (у них немає `category`, тому "потрапляти" в конкретний
-  // фільтр коректно не можуть).
-  const extraRealCourses =
-    category === "all" ? realCourses.filter((c) => !staticSlugs.has(c.slug)) : [];
+
+  // Фільтри тепер будуються з реальних категорій курсів (`Course.categories`
+  // з БД, задача CAT+), а не зі старого статичного одиничного поля
+  // `category` в `lib/data/courses.ts` — щоб і пресетні, і кастомні
+  // категорії, додані адміном, автоматично зʼявлялись тут. Показуються
+  // лише категорії, які реально є хоча б в одному курсі — порожній
+  // фільтр без жодного результату сенсу не має.
+  const categoryFilters = useMemo(() => {
+    const values = new Set<string>();
+    realCourses.forEach((course) => course.categories.forEach((c) => values.add(c)));
+    return Array.from(values).sort((a, b) => a.localeCompare(b, "uk"));
+  }, [realCourses]);
+
+  // Для статичного демо-курсу (`COURSES`, наразі лише "Гель-лак для
+  // новачків") категорії беруться з відповідного реального курсу в БД за
+  // `slug` — той самий "реальний" курс, той самий підхід, що вже
+  // застосований для `coverImage`/`href` нижче. Якщо реального відповідника
+  // немає (ще не створено в БД), картка вважається без категорій і
+  // потрапляє лише під фільтр "Усі".
+  const filteredStaticCourses = useMemo(() => {
+    if (category === "all") return COURSES;
+    return COURSES.filter((course) => {
+      const realMatch = realCourses.find((real) => real.slug === course.slug);
+      return realMatch?.categories.includes(category) ?? false;
+    });
+  }, [category, realCourses]);
+
+  const extraRealCourses = useMemo(() => {
+    const withoutStaticMatch = realCourses.filter((c) => !staticSlugs.has(c.slug));
+    if (category === "all") return withoutStaticMatch;
+    return withoutStaticMatch.filter((c) => c.categories.includes(category));
+  }, [category, realCourses, staticSlugs]);
 
   const hasAnyResults = filteredStaticCourses.length > 0 || extraRealCourses.length > 0;
 
@@ -56,19 +78,31 @@ export function CoursesCatalogClient({
   return (
     <>
       <div className="mt-8 flex flex-wrap justify-center gap-2.5">
-        {COURSE_FILTERS.map((filter) => (
+        <button
+          type="button"
+          onClick={() => setCategory("all")}
+          className={cn(
+            "rounded-full border px-4 py-2 text-[13px] transition-colors",
+            category === "all"
+              ? "border-accent bg-accent text-white"
+              : "border-rose-line bg-white text-ink hover:border-accent/60",
+          )}
+        >
+          Усі курси
+        </button>
+        {categoryFilters.map((value) => (
           <button
-            key={filter.value}
+            key={value}
             type="button"
-            onClick={() => setCategory(filter.value)}
+            onClick={() => setCategory(value)}
             className={cn(
               "rounded-full border px-4 py-2 text-[13px] transition-colors",
-              category === filter.value
+              category === value
                 ? "border-accent bg-accent text-white"
                 : "border-rose-line bg-white text-ink hover:border-accent/60",
             )}
           >
-            {filter.label}
+            {value}
           </button>
         ))}
       </div>

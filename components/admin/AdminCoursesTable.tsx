@@ -95,11 +95,12 @@ export function AdminCoursesTable({ initialCourses }: { initialCourses: Course[]
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-rose-line/40 bg-white">
-          <table className="w-full min-w-[560px] text-left text-sm">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-rose-line/30 text-xs tracking-wide text-muted uppercase">
                 <th className="px-5 py-3 font-medium">Назва</th>
                 <th className="px-5 py-3 font-medium">Slug</th>
+                <th className="px-5 py-3 font-medium">Категорії</th>
                 <th className="px-5 py-3 font-medium">Опубліковано</th>
                 <th className="px-5 py-3 font-medium">Дії</th>
               </tr>
@@ -119,6 +120,22 @@ export function AdminCoursesTable({ initialCourses }: { initialCourses: Course[]
                     </Link>
                   </td>
                   <td className="px-5 py-4 text-muted">{course.slug}</td>
+                  <td className="px-5 py-4">
+                    {course.categories.length === 0 ? (
+                      <span className="text-muted">—</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {course.categories.map((category) => (
+                          <span
+                            key={category}
+                            className="rounded-full bg-cream-soft px-2 py-0.5 text-xs text-ink"
+                          >
+                            {category}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-5 py-4">
                     <Switch
                       checked={course.published}

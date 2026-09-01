@@ -60,6 +60,14 @@ function readCourseFormFields(formData: FormData) {
       .getAll("introHighlights")
       .map((value) => (typeof value === "string" ? value.trim() : ""))
       .filter((value) => value.length > 0),
+    // ФАЗА CAT+, задача CAT+.0.4 — той самий підхід, що `introHighlights`
+    // щойно вище: кілька полів `categories` з однаковим іменем
+    // (пресети + власні категорії з `CourseForm.tsx` йдуть одним і тим
+    // самим полем форми), `FormData.getAll` повертає їх усі.
+    categories: formData
+      .getAll("categories")
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .filter((value) => value.length > 0),
   };
 }
 

@@ -13,6 +13,7 @@ import {
   COURSE_COVER_MAX_SIZE_BYTES,
   COURSE_CERTIFICATE_ALLOWED_MIME_TYPES,
   COURSE_CERTIFICATE_MAX_SIZE_BYTES,
+  COURSE_CATEGORY_PRESETS,
 } from "@/modules/courses";
 
 export interface CourseFormValues {
@@ -22,6 +23,8 @@ export interface CourseFormValues {
   introText: string;
   introHighlights: string[];
   trailerUrl: string;
+  /** ФАЗА CAT+, задача CAT+.2.1 — обрані пресети й/або власні категорії курсу. */
+  categories: string[];
   published: boolean;
 }
 
@@ -52,6 +55,7 @@ const EMPTY: CourseFormValues = {
   introText: "",
   introHighlights: [],
   trailerUrl: "",
+  categories: [],
   published: false,
 };
 
@@ -124,6 +128,17 @@ const CERTIFICATE_ERROR_MESSAGES = {
  * іменем — це готовий макет, не шаблон для підстановки тексту, той
  * самий принцип, що вже для завантажених користувачами сертифікатів,
  * CERT+.1).
+ *
+ * ФАЗА CAT+ (01.09.2026, за прямим проханням користувача — "щоб при
+ * створенні курсів можна було вказувати декілька категорій (нарощення,
+ * зняття, чистка, опил, початковий рівень, середній рівень, просунутий
+ * рівень, або свою власну категорію)"): новий блок "Категорії курсу" —
+ * кнопки-тумблери для `COURSE_CATEGORY_PRESETS` (той самий готовий
+ * набір, що дав користувач) плюс текстове поле "своя категорія" для
+ * будь-якого довільного значення. Обидва варіанти зберігаються в
+ * одному масиві `categories` (`Course.categories`, простий
+ * Postgres `String[]`, той самий підхід, що вже `introHighlights`
+ * вище) — на рівні даних різниці немає.
  */
 export function CourseForm({
   initial,
@@ -185,6 +200,51 @@ export function CourseForm({
       introHighlights: prev.introHighlights.filter((_, i) => i !== index),
     }));
   }
+
+  /**
+   * ФАЗА CAT+, задача CAT+.2.1 (01.09.2026). Категорії курсу — пресети
+   * (`COURSE_CATEGORY_PRESETS`) поводяться як кнопки-тумблери (клік
+   * додає/прибирає з `values.categories`), а `customCategoryInput` —
+   * окреме текстове поле для власної довільної категорії з прямого
+   * прохання користувача ("або свою власну категорію"). Обидва варіанти
+   * зберігаються в ОДНОМУ масиві `values.categories` — на рівні даних
+   * різниці немає, лише UI розрізняє "готовий пресет" від "щойно
+   * вписаного тексту".
+   */
+  const [customCategoryInput, setCustomCategoryInput] = useState("");
+
+  function toggleCategory(category: string) {
+    setValues((prev) => ({
+      ...prev,
+      categories: prev.categories.includes(category)
+        ? prev.categories.filter((c) => c !== category)
+        : [...prev.categories, category],
+    }));
+  }
+
+  function addCustomCategory() {
+    const trimmed = customCategoryInput.trim();
+    if (!trimmed || values.categories.includes(trimmed)) {
+      setCustomCategoryInput("");
+      return;
+    }
+    setValues((prev) => ({ ...prev, categories: [...prev.categories, trimmed] }));
+    setCustomCategoryInput("");
+  }
+
+  function removeCategory(category: string) {
+    setValues((prev) => ({
+      ...prev,
+      categories: prev.categories.filter((c) => c !== category),
+    }));
+  }
+
+  // Власні категорії — ті обрані, що НЕ входять у готовий набір
+  // пресетів (для окремого блоку "видаляти хрестиком" нижче; пресети й
+  // так знімаються повторним кліком на ту саму кнопку-тумблер).
+  const customCategories = values.categories.filter(
+    (c) => !(COURSE_CATEGORY_PRESETS as readonly string[]).includes(c),
+  );
 
   function validate(): boolean {
     const nextErrors: typeof errors = {};
@@ -270,6 +330,10 @@ export function CourseForm({
       .map((item) => item.trim())
       .filter((item) => item.length > 0)
       .forEach((item) => formData.append("introHighlights", item));
+    values.categories
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .forEach((item) => formData.append("categories", item));
     formData.append("published", String(values.published));
 
     if (coverFile) {
@@ -358,6 +422,68 @@ export function CourseForm({
         <Button type="button" variant="outline" size="sm" onClick={addHighlight} className="self-start">
           + Додати пункт
         </Button>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-ink">Категорії курсу</label>
+        <div className="flex flex-wrap gap-2">
+          {COURSE_CATEGORY_PRESETS.map((category) => {
+            const active = values.categories.includes(category);
+            return (
+              <button
+                key={category}
+                type="button"
+                onClick={() => toggleCategory(category)}
+                aria-pressed={active}
+                className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  active
+                    ? "border-accent bg-accent-soft text-accent-dark"
+                    : "border-rose-line/60 bg-white text-muted hover:border-accent"
+                }`}
+              >
+                {category}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <Input
+              placeholder="Своя категорія (напр. Дизайн нігтів)"
+              value={customCategoryInput}
+              onChange={(e) => setCustomCategoryInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addCustomCategory();
+                }
+              }}
+            />
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={addCustomCategory}>
+            + Додати
+          </Button>
+        </div>
+        {customCategories.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {customCategories.map((category) => (
+              <span
+                key={category}
+                className="flex items-center gap-1.5 rounded-full bg-cream-soft px-3 py-1.5 text-sm text-ink"
+              >
+                {category}
+                <button
+                  type="button"
+                  onClick={() => removeCategory(category)}
+                  aria-label={`Прибрати категорію ${category}`}
+                  className="text-muted hover:text-danger"
+                >
+                  <CloseIcon size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">

@@ -60,6 +60,18 @@ export function RealCourseCard({ course, lessonsCount, className }: RealCourseCa
       </div>
 
       <div className="flex flex-1 flex-col gap-2.5 p-5">
+        {course.categories.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {course.categories.map((category) => (
+              <span
+                key={category}
+                className="rounded-full bg-accent-soft px-2.5 py-0.5 text-[11px] text-accent-dark"
+              >
+                {category}
+              </span>
+            ))}
+          </div>
+        )}
         <h3 className="font-serif text-[19px] text-ink">{course.title}</h3>
         <p className="flex-1 text-sm leading-relaxed text-muted">{course.description}</p>
 

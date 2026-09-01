@@ -56,3 +56,93 @@ body {
 .animate-auth-fade-in {
   animation: auth-fade-in 0.18s ease-out;
 }
+
+/*
+ * ФАЗА FLOAT+, задача FLOAT+.2.1 (31.08.2026). Обтікання тексту
+ * зображеннями в статтях і ДЗ — перекриває дефолтну блочну поведінку
+ * `.prose img` для зображень з атрибутом `data-align`
+ * (`lib/tiptap/extensions.ts`, `FloatImage`).
+ */
+.prose img[data-align="left"] {
+  float: left;
+  max-width: 45%;
+  height: auto;
+  margin: 0.25em 1.5em 1em 0;
+}
+
+.prose img[data-align="right"] {
+  float: right;
+  max-width: 45%;
+  height: auto;
+  margin: 0.25em 0 1em 1.5em;
+}
+
+/* Кліафікс — щоб `.prose`-контейнер не "схлопувався", коли останній
+   елемент статті/ДЗ — плаваюче зображення. */
+.prose::after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+/* Текстове обтікання на вузькому екрані майже завжди виглядає гірше
+   блочного варіанту — знімаємо його на мобільних. */
+@media (max-width: 640px) {
+  .prose img[data-align="left"],
+  .prose img[data-align="right"] {
+    float: none;
+    max-width: 100%;
+    margin: 1em 0;
+  }
+}
+
+/*
+ * ФАЗА RICH+, задача RICH+.2.1 (01.09.2026). Спойлер
+ * (`@tiptap/extension-details` рендерить звичайний `<details>`/
+ * `<summary>`) — базовий браузерний трикутник-розкривач лишаємо
+ * (нативна доступність/клавіатура задарма), додаємо лише бренд-стилі:
+ * рамка й фон у палітрі проєкту, відступ між заголовком і вмістом.
+ */
+.prose details {
+  margin: 1em 0;
+  border: 1px solid var(--color-rose-line);
+  border-radius: 0.75rem;
+  background: var(--color-cream-soft);
+  padding: 0.25em 0.9em;
+}
+
+.prose details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-accent-dark);
+  padding: 0.5em 0;
+}
+
+.prose details[open] summary {
+  border-bottom: 1px solid var(--color-rose-line);
+  margin-bottom: 0.5em;
+}
+
+/*
+ * ФАЗА RICH+, задача RICH+.2.2. Таблиці (`@tiptap/extension-table`) —
+ * `@tailwindcss/typography` вже дає базове оформлення `.prose table`,
+ * але без рамок на кожній клітинці (типова верстка тексту, не
+ * "таблиця з клітинками"); додаємо рамки й виділення заголовка, той
+ * самий принцип палітри, що й у спойлері вище.
+ */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.prose table th,
+.prose table td {
+  border: 1px solid var(--color-rose-line);
+  padding: 0.5em 0.75em;
+}
+
+.prose table th {
+  background: var(--color-cream-soft);
+  color: var(--color-ink);
+  text-align: left;
+}

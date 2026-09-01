@@ -15,5 +15,6 @@ export {
   COURSE_COVER_ALLOWED_MIME_TYPES,
   COURSE_CERTIFICATE_MAX_SIZE_BYTES,
   COURSE_CERTIFICATE_ALLOWED_MIME_TYPES,
+  COURSE_CATEGORY_PRESETS,
 } from "./schema";
 export type { Course, CreateCourseInput, UpdateCourseInput } from "./schema";

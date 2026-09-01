@@ -57,6 +57,8 @@ export interface CreateCourseData {
   masterAvatarUrl?: string | null;
   introTitle?: string | null;
   introHighlights?: string[];
+  /** ФАЗА CAT+, задача CAT+.0.3 — той самий опційний масив-підхід, що `introHighlights` вище. */
+  categories?: string[];
 }
 
 export async function createCourse(data: CreateCourseData) {
@@ -76,6 +78,7 @@ export async function createCourse(data: CreateCourseData) {
       masterAvatarUrl: data.masterAvatarUrl ?? null,
       introTitle: data.introTitle ?? null,
       introHighlights: data.introHighlights ?? [],
+      categories: data.categories ?? [],
     },
   });
 }
@@ -94,6 +97,8 @@ export interface UpdateCourseData {
   masterAvatarUrl?: string | null;
   introTitle?: string | null;
   introHighlights?: string[];
+  /** ФАЗА CAT+, задача CAT+.0.3 — той самий опційний масив-підхід, що `introHighlights` вище. */
+  categories?: string[];
 }
 
 export async function updateCourse(id: string, data: UpdateCourseData) {

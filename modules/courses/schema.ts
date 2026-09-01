@@ -63,6 +63,28 @@ export const COURSE_CERTIFICATE_ALLOWED_MIME_TYPES = [
 export type CourseCertificateAllowedMimeType =
   (typeof COURSE_CERTIFICATE_ALLOWED_MIME_TYPES)[number];
 
+/**
+ * ФАЗА CAT+, задача CAT+.0.2 (01.09.2026, за прямим проханням
+ * користувача — "можна було вказувати декілька категорій (нарощення,
+ * зняття, чистка, опил, початковий рівень, середній рівень,
+ * просунутий рівень, або свою власну категорію)"). Готовий набір
+ * пресетів для швидкого вибору в адмінці (`CourseForm.tsx`) — НЕ enum
+ * у Prisma-схемі: `Course.categories` лишається звичайним `String[]`,
+ * тому цей список — лише підказка UI, не обмеження на рівні БД/валідації
+ * (`CreateCourseSchema.categories` приймає будь-який непорожній рядок,
+ * саме щоб довільна власна категорія з прямого прохання працювала
+ * нарівні з пресетами).
+ */
+export const COURSE_CATEGORY_PRESETS = [
+  "Нарощення",
+  "Зняття",
+  "Чистка",
+  "Опил",
+  "Початковий рівень",
+  "Середній рівень",
+  "Просунутий рівень",
+] as const;
+
 export const CreateCourseSchema = z.object({
   title: z.string().trim().min(3, "Назва курсу має містити мінімум 3 символи"),
   description: z.string().trim().min(10, "Опис курсу має містити мінімум 10 символів"),
@@ -86,6 +108,14 @@ export const CreateCourseSchema = z.object({
   // HOME+.2.1) — доповнюють `introVideoUrl`/`introDescription` вище.
   introTitle: z.string().trim().min(1).optional().nullable(),
   introHighlights: z.array(z.string().trim().min(1)).optional(),
+  // ФАЗА CAT+, задача CAT+.0.2 — те саме "довільний масив рядків, без
+  // жорсткого enum", що `introHighlights` щойно вище: дозволяє і
+  // пресети з `COURSE_CATEGORY_PRESETS`, і будь-яку власну категорію,
+  // яку адмін впише текстом (пряме прохання — "або свою власну
+  // категорію"). Порожні/пробільні значення відфільтровуються так само,
+  // як для `introHighlights` (`modules/courses/actions.ts::
+  // readCourseFormFields`).
+  categories: z.array(z.string().trim().min(1)).optional(),
 });
 
 export const UpdateCourseSchema = CreateCourseSchema.partial().extend({
@@ -112,6 +142,8 @@ export interface Course {
   masterAvatarUrl: string | null;
   introTitle: string | null;
   introHighlights: string[];
+  /** ФАЗА CAT+, задача CAT+.0.2 — обрані пресети й/або власні категорії курсу. */
+  categories: string[];
   createdAt: Date;
   updatedAt: Date;
 }

@@ -1,11 +1,9 @@
 "use client";
 
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import TiptapLink from "@tiptap/extension-link";
-import TiptapImage from "@tiptap/extension-image";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { TIPTAP_EXTENSIONS } from "@/lib/tiptap/extensions";
 
 export interface TiptapEditorProps {
   /** Початковий контент — серіалізований JSON з `Article.contentJson` (порожній рядок = новий, порожній документ). */
@@ -22,12 +20,6 @@ export interface TiptapEditorProps {
    */
   onUploadImage?: (file: File) => Promise<string>;
 }
-
-const EXTENSIONS = [
-  StarterKit,
-  TiptapLink.configure({ openOnClick: false, autolink: true }),
-  TiptapImage,
-];
 
 function parseInitialContent(json: string): object | undefined {
   if (!json.trim()) return undefined;
@@ -134,6 +126,24 @@ function Toolbar({ editor, onUploadImage }: ToolbarProps) {
     }
   }
 
+  /**
+   * ФАЗА RICH+, задача RICH+.1.1 (01.09.2026). Спойлер — немає окремої
+   * `toggleDetails` команди в пакеті (лише `setDetails`/`unsetDetails`),
+   * тож "тумблер" збираємо самі через `editor.isActive("details")` —
+   * той самий принцип active-стану, що вже підсвічує H1/жирний/курсив
+   * у цьому тулбарі, просто застосований і до вибору команди, не лише
+   * до підсвітки кнопки.
+   */
+  function toggleSpoiler() {
+    if (editor.isActive("details")) {
+      editor.chain().focus().unsetDetails().run();
+    } else {
+      editor.chain().focus().setDetails().run();
+    }
+  }
+
+  const inTable = editor.isActive("table");
+
   return (
     <div className="flex flex-wrap items-center gap-1 border-b border-rose-line/40 bg-cream-soft/50 px-2 py-1.5">
       <ToolbarButton
@@ -199,6 +209,85 @@ function Toolbar({ editor, onUploadImage }: ToolbarProps) {
       >
         {uploading ? "⏳" : "🖼"}
       </ToolbarButton>
+      <span className="mx-1 h-5 w-px bg-rose-line/40" aria-hidden />
+      <ToolbarButton
+        label="Обтікання ліворуч"
+        active={editor.isActive("image", { align: "left" })}
+        disabled={!editor.isActive("image")}
+        onClick={() =>
+          editor.chain().focus().updateAttributes("image", { align: "left" }).run()
+        }
+      >
+        ⬅
+      </ToolbarButton>
+      <ToolbarButton
+        label="Без обтікання"
+        active={editor.isActive("image", { align: null })}
+        disabled={!editor.isActive("image")}
+        onClick={() =>
+          editor.chain().focus().updateAttributes("image", { align: null }).run()
+        }
+      >
+        ⬛
+      </ToolbarButton>
+      <ToolbarButton
+        label="Обтікання праворуч"
+        active={editor.isActive("image", { align: "right" })}
+        disabled={!editor.isActive("image")}
+        onClick={() =>
+          editor.chain().focus().updateAttributes("image", { align: "right" }).run()
+        }
+      >
+        ➡
+      </ToolbarButton>
+      <span className="mx-1 h-5 w-px bg-rose-line/40" aria-hidden />
+      <ToolbarButton label="Спойлер" active={editor.isActive("details")} onClick={toggleSpoiler}>
+        ▶
+      </ToolbarButton>
+      <span className="mx-1 h-5 w-px bg-rose-line/40" aria-hidden />
+      <ToolbarButton
+        label="Вставити таблицю"
+        onClick={() =>
+          editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+        }
+      >
+        ▦
+      </ToolbarButton>
+      <ToolbarButton
+        label="Додати рядок"
+        disabled={!inTable}
+        onClick={() => editor.chain().focus().addRowAfter().run()}
+      >
+        +Р
+      </ToolbarButton>
+      <ToolbarButton
+        label="Додати стовпець"
+        disabled={!inTable}
+        onClick={() => editor.chain().focus().addColumnAfter().run()}
+      >
+        +К
+      </ToolbarButton>
+      <ToolbarButton
+        label="Видалити рядок"
+        disabled={!inTable}
+        onClick={() => editor.chain().focus().deleteRow().run()}
+      >
+        -Р
+      </ToolbarButton>
+      <ToolbarButton
+        label="Видалити стовпець"
+        disabled={!inTable}
+        onClick={() => editor.chain().focus().deleteColumn().run()}
+      >
+        -К
+      </ToolbarButton>
+      <ToolbarButton
+        label="Видалити таблицю"
+        disabled={!inTable}
+        onClick={() => editor.chain().focus().deleteTable().run()}
+      >
+        🗑
+      </ToolbarButton>
       {onUploadImage && (
         <input
           ref={fileInputRef}
@@ -226,6 +315,14 @@ function Toolbar({ editor, onUploadImage }: ToolbarProps) {
  * `@tiptap/extension-image`. Зображення — за URL (той самий підхід, що
  * й обкладинка курсу, задача 8.1.6: немає підключеного файлового
  * сховища в проєкті).
+ *
+ * ФАЗА RICH+ (01.09.2026, прохання користувача): дві нові кнопки
+ * тулбара — "Спойлер" (`@tiptap/extension-details`, ховає вміст під
+ * заголовком, розкривається по кліку студентом) і "Таблиця"
+ * (`@tiptap/extension-table`/`TableKit`, вставка/рядки/стовпці).
+ * Обидва розширення — у спільному `TIPTAP_EXTENSIONS`
+ * (`lib/tiptap/extensions.ts`), тож `ArticleRenderer`/
+ * `HomeworkAssignmentRenderer` рендерять їх автоматично, без правок.
  */
 export function TiptapEditor({
   initialContentJson,
@@ -234,7 +331,7 @@ export function TiptapEditor({
   onUploadImage,
 }: TiptapEditorProps) {
   const editor = useEditor({
-    extensions: EXTENSIONS,
+    extensions: TIPTAP_EXTENSIONS,
     content: parseInitialContent(initialContentJson),
     editable,
     immediatelyRender: false,

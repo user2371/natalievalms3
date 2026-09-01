@@ -2,11 +2,10 @@
 
 import { useMemo } from "react";
 import { generateHTML } from "@tiptap/html";
-import StarterKit from "@tiptap/starter-kit";
-import TiptapLink from "@tiptap/extension-link";
-import TiptapImage from "@tiptap/extension-image";
-
-const EXTENSIONS = [StarterKit, TiptapLink, TiptapImage];
+import { TIPTAP_EXTENSIONS } from "@/lib/tiptap/extensions";
+import { useProseImageLightbox } from "@/lib/tiptap/useProseImageLightbox";
+import { Modal } from "@/components/ui/Modal";
+import { CloseIcon } from "@/components/ui/icons";
 
 export interface HomeworkAssignmentRendererProps {
   /** Серіалізований JSON з `HomeworkAssignment.contentJson`. */
@@ -22,16 +21,22 @@ export interface HomeworkAssignmentRendererProps {
  * другого живого екземпляра редактора (`editable={false}` тут не
  * потрібен окремо: `generateHTML` не створює редагований інстанс
  * взагалі, той самий підхід, що вже в `ArticleRenderer`).
+ *
+ * ФАЗА FLOAT+, задача FLOAT+.5 (31.08.2026, прохання користувача): клік
+ * на зображення в ДЗ відкриває його велику версію в модалці — той самий
+ * `useProseImageLightbox`, що й `ArticleRenderer` (1:1 структура).
  */
 export function HomeworkAssignmentRenderer({
   contentJson,
   className,
 }: HomeworkAssignmentRendererProps) {
+  const { lightboxImage, closeLightbox, handleContentClick } = useProseImageLightbox();
+
   const html = useMemo(() => {
     if (!contentJson.trim()) return "";
     try {
       const json = JSON.parse(contentJson);
-      return generateHTML(json, EXTENSIONS);
+      return generateHTML(json, TIPTAP_EXTENSIONS);
     } catch {
       return "";
     }
@@ -40,9 +45,40 @@ export function HomeworkAssignmentRenderer({
   if (!html) return null;
 
   return (
-    <div
-      className={`prose prose-sm max-w-none ${className ?? ""}`}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <>
+      <div
+        className={`prose prose-sm max-w-none [&_img]:cursor-zoom-in ${className ?? ""}`}
+        dangerouslySetInnerHTML={{ __html: html }}
+        onClick={handleContentClick}
+      />
+      <Modal
+        open={lightboxImage !== null}
+        onClose={closeLightbox}
+        labelledBy="homework-image-lightbox-title"
+        variant="media"
+      >
+        <div className="mb-2 flex items-center justify-end">
+          <h2 id="homework-image-lightbox-title" className="sr-only">
+            {lightboxImage?.alt || "Зображення"}
+          </h2>
+          <button
+            type="button"
+            onClick={closeLightbox}
+            aria-label="Закрити"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-rose-soft/40 hover:text-ink"
+          >
+            <CloseIcon size={16} />
+          </button>
+        </div>
+        {lightboxImage && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={lightboxImage.src}
+            alt={lightboxImage.alt}
+            className="max-h-[75vh] w-full rounded-xl object-contain"
+          />
+        )}
+      </Modal>
+    </>
   );
 }

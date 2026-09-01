@@ -50,6 +50,7 @@ export function AdminEditCourseForm({ course }: { course: Course }) {
         introText: course.introDescription ?? "",
         introHighlights: course.introHighlights ?? [],
         trailerUrl: course.introVideoUrl ?? "",
+        categories: course.categories ?? [],
         published: course.published,
         coverImage: course.coverImage ?? undefined,
         certificateImage: course.certificateImage ?? undefined,
