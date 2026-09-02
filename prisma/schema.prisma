@@ -45,6 +45,8 @@ model User {
   pointsLedger        PointsLedger[]
   homeworkSubmissions HomeworkSubmission[]
   certificates        Certificate[]
+  // ФАЗА PAID+, задача PAID+.0.3 — див. докблок над `Course.purchases`.
+  purchases           CoursePurchase[]
 }
 
 model PendingRegistration {
@@ -116,6 +118,23 @@ model Course {
   // немає. `String[]`, а не enum: enum заборонив би "свою власну
   // категорію" з прямого прохання користувача.
   categories       String[] @default([])
+  // ФАЗА PAID+, задача PAID+.0.1 (02.09.2026, за прямим проханням
+  // користувача — "зроби щоб можна було при створенні чи редагуванні
+  // курсу вибирати безкоштовний чи платний курс"). Той самий принцип
+  // простого прапорця на моделі `Course`, що вже `published` вище:
+  // `isPaid = false` — курс поводиться ТОЧНО як зараз (без жодних змін
+  // доступу). `isPaid = true` — курс за замовчуванням НЕДОСТУПНИЙ для
+  // студентів (`modules/access::hasCourseAccess`, задача PAID+.1.1),
+  // доки не буде підключено реальну оплату (ФАЗА PAID+.4, окрема
+  // наступна фаза — сюди НЕ входить).
+  isPaid           Boolean  @default(false)
+  // Ціна в цілих гривнях (без копійок — свідоме спрощення, той самий
+  // рівень деталізації, що вже прийнятий у проєкті для інших полів;
+  // якщо колись знадобляться копійки — окрема міграція на `Decimal`).
+  // `NULL`, доки `isPaid = false`; адмінська форма скидає це поле в
+  // `NULL` при вимкненні перемикача "Платний курс"
+  // (`modules/courses/actions.ts::readCourseFormFields`).
+  priceUAH         Int?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -123,6 +142,15 @@ model Course {
   enrollments Enrollment[]
   certificates Certificate[]
   featuredBy   SiteSettings?
+  // ФАЗА PAID+, задача PAID+.0.3 — записи покупок цього курсу. Модель
+  // `CoursePurchase` існує в схемі вже зараз (задля єдиної міграції
+  // базових полів курсу — `isPaid`/`priceUAH` — і структури покупки
+  // разом, без повторної міграції пізніше), але РЕАЛЬНО не заповнюється
+  // жодним кодом, доки не підключено платіжного провайдера (ФАЗА
+  // PAID+.4). До того часу `hasCourseAccess` (PAID+.1.1) просто ніколи
+  // не знаходить `COMPLETED`-запису — платний курс лишається
+  // недоступним, що і є задуманою поведінкою "за замовчуванням".
+  purchases   CoursePurchase[]
 }
 
 // Сайтові налаштування — однорядкова (singleton) таблиця (задача
@@ -226,6 +254,54 @@ model Enrollment {
   course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@unique([userId, courseId])
+}
+
+// ФАЗА PAID+, задача PAID+.0.3 (02.09.2026, за прямим проханням
+// користувача). Запис однієї спроби купівлі платного курсу. НАВМИСНО
+// окрема модель від `Enrollment` (вище) — `Enrollment` лишається тим,
+// чим і був (службовий запис "юзер бачить цей курс у Моєму навчанні",
+// задача 7.10, не гейт доступу), а `CoursePurchase` — єдине джерело
+// істини для "чи юзер реально заплатив за платний курс"
+// (`modules/access::hasCourseAccess`, PAID+.1.1). РЕАЛЬНО не
+// заповнюється жодним кодом до ФАЗИ PAID+.4 (підключення платіжного
+// провайдера) — модель додана зараз лише щоб не робити другу міграцію
+// базових полів курсу пізніше.
+enum PurchaseStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+model CoursePurchase {
+  id       String @id @default(uuid())
+  userId   String
+  courseId String
+
+  status PurchaseStatus @default(PENDING)
+  // Ціна курсу НА МОМЕНТ покупки (копія `Course.priceUAH`, а не
+  // посилання) — щоб майбутня зміна ціни курсу адміном не переписувала
+  // заднім числом суму вже здійсненої покупки.
+  amountUAH Int
+  provider  String
+  // Власний ідемпотентний ідентифікатор замовлення, який генерується
+  // ДО відправки запиту платіжному провайдеру і передається йому —
+  // джерело істини для ідемпотентної обробки вебхук-ретраїв (той самий
+  // принцип, що вже `@@unique([userId, courseId])` на `Enrollment` для
+  // `ensureEnrollment`, задача 7.10), а НЕ `providerPaymentId` нижче
+  // (він стає відомим лише вже ПІСЛЯ відповіді провайдера).
+  providerOrderId   String  @unique
+  providerPaymentId String?
+
+  createdAt DateTime  @default(now())
+  paidAt    DateTime?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  // Швидка перевірка "чи є в юзера COMPLETED-покупка цього курсу" в
+  // `hasCourseAccess` (PAID+.1.1) без повного сканування таблиці.
+  @@index([userId, courseId, status])
 }
 
 model Progress {

@@ -136,6 +136,12 @@ export async function createCourseService(
     introTitle: parsed.data.introTitle,
     introHighlights: parsed.data.introHighlights,
     categories: parsed.data.categories,
+    isPaid: parsed.data.isPaid,
+    // ФАЗА PAID+, задача PAID+.0.1 — `priceUAH` завжди `null`, коли
+    // `isPaid` не `true`, НЕЗАЛЕЖНО від того, що прийшло у вхідних
+    // даних (захист на рівні сервісу, а не лише клієнтської форми —
+    // той самий принцип "не тільки в UI", що вже для ролі `ADMIN`).
+    priceUAH: parsed.data.isPaid ? (parsed.data.priceUAH ?? null) : null,
   });
 }
 
@@ -154,6 +160,16 @@ export async function updateCourseService(input: UpdateCourseInput) {
   // важливий для вже опублікованих посилань на курс (SEO, закладки).
   // Зміна slug'а курсу після публікації — окрема задача поза 3.1–3.5.
   const { id, ...rest } = parsed.data;
+  // ФАЗА PAID+, задача PAID+.0.1 — той самий захист, що вже в
+  // `createCourseService` вище: `priceUAH` не лишається "мертвим"
+  // значенням, коли адмін вимикає перемикач "Платний курс".
+  // `readCourseFormFields` (`actions.ts`) завжди надсилає явний
+  // `isPaid` (той самий підхід, що вже й `published`), тому тут це не
+  // "не чіпати поле" (як `undefined` для `coverImage`), а свідоме
+  // "скинути ціну".
+  if (rest.isPaid === false) {
+    rest.priceUAH = null;
+  }
   return repository.updateCourse(id, rest);
 }
 

@@ -85,7 +85,16 @@ export const COURSE_CATEGORY_PRESETS = [
   "Просунутий рівень",
 ] as const;
 
-export const CreateCourseSchema = z.object({
+/**
+ * ФАЗА PAID+, задача PAID+.0.1 (02.09.2026) — базова `z.object` без
+ * `superRefine` (нижче), винесена окремо, бо `.partial()`/`.extend()`
+ * (потрібні для `UpdateCourseSchema`) існують лише на звичайному
+ * `ZodObject`, не на обгортці `ZodEffects`, яку повертає `.superRefine()`.
+ * Умовна перевірка "`priceUAH` обов'язковий, коли `isPaid: true`"
+ * застосовується ОКРЕМО для `CreateCourseSchema` і `UpdateCourseSchema`
+ * нижче — саме тому вона не може жити просто всередині цього `z.object`.
+ */
+const CourseBaseSchema = z.object({
   title: z.string().trim().min(3, "Назва курсу має містити мінімум 3 символи"),
   description: z.string().trim().min(10, "Опис курсу має містити мінімум 10 символів"),
   coverImage: z.string().trim().url("Некоректний URL обкладинки").optional().nullable(),
@@ -116,11 +125,41 @@ export const CreateCourseSchema = z.object({
   // як для `introHighlights` (`modules/courses/actions.ts::
   // readCourseFormFields`).
   categories: z.array(z.string().trim().min(1)).optional(),
+  // ФАЗА PAID+, задача PAID+.0.1/2.3 (02.09.2026, за прямим проханням
+  // користувача — вибір "безкоштовний чи платний курс" при
+  // створенні/редагуванні). `priceUAH` обов'язковий і > 0 лише коли
+  // `isPaid` справді `true` — умовне правило нижче, в
+  // `requirePriceWhenPaid` (Zod не має вбудованого "required if").
+  isPaid: z.boolean().optional().default(false),
+  priceUAH: z.number().int().positive("Ціна має бути більшою за нуль").optional().nullable(),
 });
 
-export const UpdateCourseSchema = CreateCourseSchema.partial().extend({
-  id: z.string().min(1, "Не вказано ID курсу"),
-});
+/**
+ * Спільна умовна перевірка для `CreateCourseSchema`/`UpdateCourseSchema`
+ * нижче: `priceUAH` обов'язковий лише коли `isPaid: true`. Окрема
+ * функція (а не два дубльовані `.superRefine()`) — щоб правило не
+ * розійшлось між create/update, коли одне з них редагуватимуть пізніше.
+ */
+function requirePriceWhenPaid(
+  data: { isPaid?: boolean; priceUAH?: number | null },
+  ctx: z.RefinementCtx,
+) {
+  if (data.isPaid && (data.priceUAH === undefined || data.priceUAH === null)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["priceUAH"],
+      message: "Вкажіть ціну для платного курсу",
+    });
+  }
+}
+
+export const CreateCourseSchema = CourseBaseSchema.superRefine(requirePriceWhenPaid);
+
+export const UpdateCourseSchema = CourseBaseSchema.partial()
+  .extend({
+    id: z.string().min(1, "Не вказано ID курсу"),
+  })
+  .superRefine(requirePriceWhenPaid);
 
 export type CreateCourseInput = z.infer<typeof CreateCourseSchema>;
 export type UpdateCourseInput = z.infer<typeof UpdateCourseSchema>;
@@ -144,6 +183,10 @@ export interface Course {
   introHighlights: string[];
   /** ФАЗА CAT+, задача CAT+.0.2 — обрані пресети й/або власні категорії курсу. */
   categories: string[];
+  /** ФАЗА PAID+, задача PAID+.0.1 — `true`, якщо курс платний (доступ гейтиться `modules/access`). */
+  isPaid: boolean;
+  /** ФАЗА PAID+, задача PAID+.0.1 — ціна в цілих гривнях; `null`, доки `isPaid === false`. */
+  priceUAH: number | null;
   createdAt: Date;
   updatedAt: Date;
 }

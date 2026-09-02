@@ -9,8 +9,10 @@ import { Badge } from "@/components/ui/Badge";
 import { ArrowLeftIcon, PlayIcon, SparkleIcon } from "@/components/ui/icons";
 import { RealLessonCard } from "@/components/lesson/RealLessonCard";
 import { CourseContinueButton } from "@/components/course/CourseContinueButton";
+import { PaywallNotice } from "@/components/course/PaywallNotice";
 import { getCourseBySlugService } from "@/modules/courses";
 import { listLessonsService } from "@/modules/lessons";
+import { hasCourseAccessService } from "@/modules/access";
 
 interface CoursePageProps {
   params: Promise<{ slug: string }>;
@@ -69,15 +71,28 @@ export default async function CoursePage({ params }: CoursePageProps) {
   // будь-кого, крім ADMIN (той самий принцип "не тільки в UI", що й у
   // мідлварі/server actions — перевірка ролі саме тут, на рівні сторінки,
   // а не залишена на відкуп UI-станам типу "прихованого лінка").
-  if (!course.published) {
-    const session = await auth();
-    const role = (session?.user as { role?: string } | undefined)?.role;
-    if (role !== "ADMIN") {
-      notFound();
-    }
+  //
+  // ФАЗА PAID+, задача PAID+.3.1 (02.09.2026) — сесія тепер читається
+  // тут один раз (раніше — лише всередині `if (!course.published)`),
+  // бо потрібна і для перевірки `published`, і для гейта платного курсу
+  // нижче (`hasCourseAccessService`).
+  const session = await auth();
+  const role = (session?.user as { role?: string } | undefined)?.role;
+
+  if (!course.published && role !== "ADMIN") {
+    notFound();
   }
 
   const lessons = await listLessonsService(course.id).catch(() => []);
+
+  // ФАЗА PAID+, задача PAID+.3.1 — платний курс без доступу: лендінг
+  // лишається видимим (опис/трейлер/програма — задача PAID+.3.1,
+  // "курс НЕ приховується з каталогу/лендінгу через `isPaid`"), лише
+  // кнопка "Почати навчання" заміняється на `PaywallNotice`.
+  const hasAccess = await hasCourseAccessService(
+    { id: course.id, isPaid: course.isPaid },
+    session?.user?.id ? { id: session.user.id, role } : undefined,
+  );
 
   return (
     <div className="flex flex-1 flex-col">
@@ -101,13 +116,26 @@ export default async function CoursePage({ params }: CoursePageProps) {
               </h1>
               <p className="mt-4 text-base text-muted sm:text-lg">{course.description}</p>
 
-              {lessons.length > 0 && (
-                <CourseContinueButton
+              {/* ФАЗА PAID+, задача PAID+.3.1 — платний курс без доступу:
+                  `PaywallNotice` замість кнопки "Почати навчання", той
+                  самий блок і для гостя (`requiresAuth`), і для
+                  залогіненого без покупки (жоден `CoursePurchase` ще не
+                  може існувати до ФАЗИ PAID+.4). */}
+              {course.isPaid && !hasAccess ? (
+                <PaywallNotice
+                  priceUAH={course.priceUAH}
+                  requiresAuth={!session?.user?.id}
                   courseId={course.id}
-                  courseSlug={course.slug}
-                  lessons={lessons}
-                  className="mt-7 inline-block"
                 />
+              ) : (
+                lessons.length > 0 && (
+                  <CourseContinueButton
+                    courseId={course.id}
+                    courseSlug={course.slug}
+                    lessons={lessons}
+                    className="mt-7 inline-block"
+                  />
+                )
               )}
             </div>
 

@@ -3,6 +3,11 @@
 // з `CLAUDE.md`, розділ "Архітектура модулів").
 
 export { syncLocalProgressAction, getCourseProgressAction } from "./actions";
-export { syncLocalProgressService, mergeProgress, getCourseProgressMapService } from "./service";
+export {
+  syncLocalProgressService,
+  mergeProgress,
+  getCourseProgressMapService,
+  ensureEnrollmentService,
+} from "./service";
 export { UpsertProgressEntrySchema, UpsertProgressInputSchema } from "./schema";
 export type { Progress, UpsertProgressEntry, UpsertProgressInput } from "./schema";

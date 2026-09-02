@@ -68,6 +68,21 @@ function readCourseFormFields(formData: FormData) {
       .getAll("categories")
       .map((value) => (typeof value === "string" ? value.trim() : ""))
       .filter((value) => value.length > 0),
+    // ФАЗА PAID+, задача PAID+.0.1/2.5 (02.09.2026, за прямим проханням
+    // користувача) — той самий підхід, що `published` вище: явний
+    // рядок `"true"`/`"false"` з `CourseForm.tsx`, ніколи `undefined`.
+    isPaid: formData.get("isPaid") === "true",
+    // Порожній рядок (адмін вимкнув "Платний курс" — `CourseForm.tsx`
+    // не рендерить/не надсилає поле ціни) → `null`, а не `NaN` від
+    // `Number("")`. `service.ts` додатково гарантує `null`, коли
+    // `isPaid: false`, незалежно від цього значення (захист на рівні
+    // сервісу, не лише форми).
+    priceUAH: (() => {
+      const raw = getString("priceUAH");
+      if (!raw) return null;
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) ? parsed : null;
+    })(),
   };
 }
 

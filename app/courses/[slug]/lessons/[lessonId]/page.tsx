@@ -12,6 +12,7 @@ import { RealCommentsBlock } from "@/components/lesson/RealCommentsBlock";
 import { RealHomeworkBlock } from "@/components/lesson/RealHomeworkBlock";
 import { ArticleRenderer } from "@/components/lesson/ArticleRenderer";
 import { LessonSpoiler } from "@/components/lesson/LessonSpoiler";
+import { PaywallNotice } from "@/components/course/PaywallNotice";
 import { Badge } from "@/components/ui/Badge";
 import { ArrowLeftIcon, ArrowRightIcon, DocumentIcon } from "@/components/ui/icons";
 import { extractYoutubeId } from "@/lib/youtube";
@@ -22,6 +23,7 @@ import { getCommentsByLessonIdService } from "@/modules/comments";
 import { getArticleByLessonIdService } from "@/modules/articles";
 import { getHomeworkForLessonService } from "@/modules/homework";
 import { getHomeworkAssignmentByLessonIdService } from "@/modules/homeworkAssignments";
+import { hasCourseAccessService } from "@/modules/access";
 
 interface CourseLessonPageProps {
   params: Promise<{ slug: string; lessonId: string }>;
@@ -113,27 +115,38 @@ export default async function CourseLessonPage({ params }: CourseLessonPageProps
 
   const session = await auth();
   const userId = session?.user?.id;
+  const role = (session?.user as { role?: string } | undefined)?.role;
 
   // Задача 3.18: той самий принцип, що й на `/courses/[slug]` — уроки
   // неопублікованого курсу теж недоступні нікому, крім ADMIN.
-  if (!course.published) {
-    const role = (session?.user as { role?: string } | undefined)?.role;
-    if (role !== "ADMIN") {
-      notFound();
-    }
+  if (!course.published && role !== "ADMIN") {
+    notFound();
   }
+
+  // ФАЗА PAID+, задача PAID+.3.2 (02.09.2026) — перевіряється ще ДО
+  // завантаження реального вмісту уроку (квіз/стаття/ДЗ/коментарі):
+  // якщо доступу немає, ці запити нижче просто не виконуються — вміст
+  // уроку платного курсу без покупки не повинен потрапляти в
+  // HTML-відповідь навіть прихованим, тому JSX цих блоків нижче теж
+  // цілком замінюється на `PaywallNotice`, а не ховається стилями.
+  const hasAccess = await hasCourseAccessService(
+    { id: course.id, isPaid: course.isPaid },
+    userId ? { id: userId, role } : undefined,
+  );
 
   const [lesson, lessons, quizQuestions, comments, article, myHomework, homeworkAssignment] =
     await Promise.all([
       getLessonByIdService(lessonId).catch(() => null),
       listLessonsService(course.id).catch(() => []),
-      getQuizQuestionsForLessonService(lessonId).catch(() => null),
-      getCommentsByLessonIdService(lessonId).catch(() => []),
-      getArticleByLessonIdService(lessonId).catch(() => null),
-      userId
+      hasAccess ? getQuizQuestionsForLessonService(lessonId).catch(() => null) : Promise.resolve(null),
+      hasAccess ? getCommentsByLessonIdService(lessonId).catch(() => []) : Promise.resolve([]),
+      hasAccess ? getArticleByLessonIdService(lessonId).catch(() => null) : Promise.resolve(null),
+      hasAccess && userId
         ? getHomeworkForLessonService(lessonId, userId).catch(() => null)
         : Promise.resolve(null),
-      getHomeworkAssignmentByLessonIdService(lessonId).catch(() => null),
+      hasAccess
+        ? getHomeworkAssignmentByLessonIdService(lessonId).catch(() => null)
+        : Promise.resolve(null),
     ]);
 
   if (!lesson || lesson.courseId !== course.id) {
@@ -179,82 +192,102 @@ export default async function CourseLessonPage({ params }: CourseLessonPageProps
               {lesson.title}
             </h1>
 
-            <div className="mt-6">
-              <VideoPlayer
-                provider={lesson.videoProvider === "CUSTOM" ? "CUSTOM" : "YOUTUBE"}
-                videoId={youtubeId}
-                title={lesson.title}
-              />
-            </div>
-
-            {/* Fixes/F.10 (points fix): кнопка ручного позначення "пройдено" —
-                лише для уроків БЕЗ квізу. Якщо в уроку є квіз, єдиний спосіб
-                завершити урок — пройти квіз (RealQuizBlock нижче); кнопка тут
-                не рендериться, щоб не можна було обійти квіз і при цьому не
-                зламати уроки, в яких квізу ще немає (адмінка їх поки не
-                покриває повністю). */}
-            {!quizQuestions && (
-              <div className="mt-5">
-                <LessonCompleteButton courseId={course.id} lessonId={lesson.id} />
-              </div>
-            )}
-
-            <div className="mt-5">
-              <GuestProgressBanner />
-            </div>
-
-            <LessonSpoiler title="Домашнє завдання" className="mt-6">
-              <div className="px-6 pb-6 sm:px-8 sm:pb-8">
-                <RealHomeworkBlock
-                  lessonId={lesson.id}
-                  initialVideoUrl={myHomework?.videoUrl ?? null}
-                  assignment={homeworkAssignment}
-                  bare
+            {/* ФАЗА PAID+, задача PAID+.3.2 (02.09.2026) — платний курс
+                без доступу: увесь реальний вміст уроку (відео/ДЗ/стаття/
+                квіз/коментарі) заміняється на ОДИН `PaywallNotice`, а не
+                ховається стилями — дані для цих блоків вище навіть НЕ
+                завантажувались (`hasAccess` перевірено до `Promise.all`),
+                тому підглянути вміст платного уроку через DevTools теж
+                не вийде. */}
+            {course.isPaid && !hasAccess ? (
+              <div className="mt-6">
+                <PaywallNotice
+                  priceUAH={course.priceUAH}
+                  variant="lesson"
+                  requiresAuth={!userId}
+                  courseId={course.id}
                 />
               </div>
-            </LessonSpoiler>
-
-            <LessonSpoiler
-              title={
-                <span className="flex flex-wrap items-center gap-3">
-                  Про сьогоднішній урок
-                  <Badge variant="soft" icon={<DocumentIcon size={13} />}>
-                    Стаття про урок
-                  </Badge>
-                </span>
-              }
-              className="mt-6"
-            >
-              <div className="px-6 pb-6 sm:px-8 sm:pb-8">
-                {article && article.contentJson.trim() ? (
-                  <ArticleRenderer contentJson={article.contentJson} />
-                ) : (
-                  <p className="rounded-xl border border-dashed border-rose-line/60 bg-cream-soft/40 px-4 py-6 text-center text-sm text-muted">
-                    До цього уроку ще не додано статтю. Зазирни трохи пізніше — матеріал
-                    з&apos;явиться тут.
-                  </p>
-                )}
-              </div>
-            </LessonSpoiler>
-
-            {quizQuestions && (
-              <LessonSpoiler title="Квіз до уроку" className="mt-6">
-                <div className="px-6 pb-6 sm:px-8 sm:pb-8">
-                  <RealQuizBlock
-                    courseId={course.id}
-                    lessonId={lesson.id}
-                    questions={quizQuestions}
-                    bare
+            ) : (
+              <>
+                <div className="mt-6">
+                  <VideoPlayer
+                    provider={lesson.videoProvider === "CUSTOM" ? "CUSTOM" : "YOUTUBE"}
+                    videoId={youtubeId}
+                    title={lesson.title}
                   />
                 </div>
-              </LessonSpoiler>
-            )}
 
-            <RealCommentsBlock
-              lessonId={lesson.id}
-              initialComments={comments}
-              className="mt-6"
-            />
+                {/* Fixes/F.10 (points fix): кнопка ручного позначення "пройдено" —
+                    лише для уроків БЕЗ квізу. Якщо в уроку є квіз, єдиний спосіб
+                    завершити урок — пройти квіз (RealQuizBlock нижче); кнопка тут
+                    не рендериться, щоб не можна було обійти квіз і при цьому не
+                    зламати уроки, в яких квізу ще немає (адмінка їх поки не
+                    покриває повністю). */}
+                {!quizQuestions && (
+                  <div className="mt-5">
+                    <LessonCompleteButton courseId={course.id} lessonId={lesson.id} />
+                  </div>
+                )}
+
+                <div className="mt-5">
+                  <GuestProgressBanner />
+                </div>
+
+                <LessonSpoiler title="Домашнє завдання" className="mt-6">
+                  <div className="px-6 pb-6 sm:px-8 sm:pb-8">
+                    <RealHomeworkBlock
+                      lessonId={lesson.id}
+                      initialVideoUrl={myHomework?.videoUrl ?? null}
+                      assignment={homeworkAssignment}
+                      bare
+                    />
+                  </div>
+                </LessonSpoiler>
+
+                <LessonSpoiler
+                  title={
+                    <span className="flex flex-wrap items-center gap-3">
+                      Про сьогоднішній урок
+                      <Badge variant="soft" icon={<DocumentIcon size={13} />}>
+                        Стаття про урок
+                      </Badge>
+                    </span>
+                  }
+                  className="mt-6"
+                >
+                  <div className="px-6 pb-6 sm:px-8 sm:pb-8">
+                    {article && article.contentJson.trim() ? (
+                      <ArticleRenderer contentJson={article.contentJson} />
+                    ) : (
+                      <p className="rounded-xl border border-dashed border-rose-line/60 bg-cream-soft/40 px-4 py-6 text-center text-sm text-muted">
+                        До цього уроку ще не додано статтю. Зазирни трохи пізніше — матеріал
+                        з&apos;явиться тут.
+                      </p>
+                    )}
+                  </div>
+                </LessonSpoiler>
+
+                {quizQuestions && (
+                  <LessonSpoiler title="Квіз до уроку" className="mt-6">
+                    <div className="px-6 pb-6 sm:px-8 sm:pb-8">
+                      <RealQuizBlock
+                        courseId={course.id}
+                        lessonId={lesson.id}
+                        questions={quizQuestions}
+                        bare
+                      />
+                    </div>
+                  </LessonSpoiler>
+                )}
+
+                <RealCommentsBlock
+                  lessonId={lesson.id}
+                  initialComments={comments}
+                  className="mt-6"
+                />
+              </>
+            )}
 
             <div className="mt-8 flex items-center justify-between gap-4 border-t border-rose-line/40 pt-6">
               {previousLesson ? (

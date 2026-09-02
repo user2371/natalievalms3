@@ -29,6 +29,21 @@ import { issueCertificateIfNotExistsService } from "@/modules/certificates";
  * Експортована окремо (не inline) — щоб можна було реально протестувати
  * саму формулу мержу без БД (задачі 7.13/7.14).
  */
+/**
+ * ФАЗА PAID+, задача PAID+.4.5 (02.09.2026, за прямим проханням
+ * користувача). Тонка публічна обгортка над `repository.ensureEnrollment`
+ * — потрібна `modules/payments/service.ts` після успішної оплати, щоб
+ * курс одразу з'явився в "Моєму навчанні" так само, як для безкоштовних
+ * (те саме рішення, що вже приймається тут для гостя, який залогінився
+ * після проходження уроку, рядок нижче). Модулі не лазять напряму в
+ * чужий `repository.ts` (правило з `CLAUDE.md`) — тому `modules/payments`
+ * імпортує саме цю функцію через `modules/progress/index.ts`, а не
+ * `ensureEnrollment` напряму.
+ */
+export async function ensureEnrollmentService(userId: string, courseId: string): Promise<void> {
+  await repository.ensureEnrollment(userId, courseId);
+}
+
 export function mergeProgress(
   userId: string,
   current: Progress | undefined,

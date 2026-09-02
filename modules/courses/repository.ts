@@ -59,6 +59,9 @@ export interface CreateCourseData {
   introHighlights?: string[];
   /** ФАЗА CAT+, задача CAT+.0.3 — той самий опційний масив-підхід, що `introHighlights` вище. */
   categories?: string[];
+  /** ФАЗА PAID+, задача PAID+.0.1 — той самий опційний підхід, що `published` вище. */
+  isPaid?: boolean;
+  priceUAH?: number | null;
 }
 
 export async function createCourse(data: CreateCourseData) {
@@ -79,6 +82,8 @@ export async function createCourse(data: CreateCourseData) {
       introTitle: data.introTitle ?? null,
       introHighlights: data.introHighlights ?? [],
       categories: data.categories ?? [],
+      isPaid: data.isPaid ?? false,
+      priceUAH: data.priceUAH ?? null,
     },
   });
 }
@@ -99,6 +104,9 @@ export interface UpdateCourseData {
   introHighlights?: string[];
   /** ФАЗА CAT+, задача CAT+.0.3 — той самий опційний масив-підхід, що `introHighlights` вище. */
   categories?: string[];
+  /** ФАЗА PAID+, задача PAID+.0.1 — той самий опційний підхід, що `published` вище. */
+  isPaid?: boolean;
+  priceUAH?: number | null;
 }
 
 export async function updateCourse(id: string, data: UpdateCourseData) {

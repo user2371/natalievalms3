@@ -26,6 +26,10 @@ export interface CourseFormValues {
   /** ФАЗА CAT+, задача CAT+.2.1 — обрані пресети й/або власні категорії курсу. */
   categories: string[];
   published: boolean;
+  /** ФАЗА PAID+, задача PAID+.2.1 — `true`, якщо курс платний. */
+  isPaid: boolean;
+  /** ФАЗА PAID+, задача PAID+.2.2 — ціна в гривнях; порожній рядок, доки `isPaid === false`. */
+  priceUAH: string;
 }
 
 export interface CourseFormProps {
@@ -57,6 +61,8 @@ const EMPTY: CourseFormValues = {
   trailerUrl: "",
   categories: [],
   published: false,
+  isPaid: false,
+  priceUAH: "",
 };
 
 const COVER_ERROR_MESSAGES = {
@@ -149,9 +155,9 @@ export function CourseForm({
   submitting = false,
 }: CourseFormProps) {
   const [values, setValues] = useState<CourseFormValues>({ ...EMPTY, ...initial });
-  const [errors, setErrors] = useState<Partial<Record<"title" | "description", string>>>(
-    {},
-  );
+  const [errors, setErrors] = useState<
+    Partial<Record<"title" | "description" | "priceUAH", string>>
+  >({});
 
   // Прев'ю обкладинки: URL вже завантаженого файлу (редагування) АБО
   // локальний `URL.createObjectURL` щойно вибраного файлу — той самий
@@ -254,6 +260,15 @@ export function CourseForm({
     if (values.description.trim().length < 10) {
       nextErrors.description = "Опис курсу має містити мінімум 10 символів";
     }
+    // ФАЗА PAID+, задача PAID+.2.3 — ціна обов'язкова і > 0 лише коли
+    // перемикач "Платний курс" увімкнено, той самий умовний принцип,
+    // що вже на сервері (`modules/courses/schema.ts::requirePriceWhenPaid`).
+    if (values.isPaid) {
+      const price = Number(values.priceUAH);
+      if (!values.priceUAH.trim() || !Number.isFinite(price) || price <= 0) {
+        nextErrors.priceUAH = "Вкажіть ціну курсу в гривнях";
+      }
+    }
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   }
@@ -335,6 +350,14 @@ export function CourseForm({
       .filter((item) => item.length > 0)
       .forEach((item) => formData.append("categories", item));
     formData.append("published", String(values.published));
+    // ФАЗА PAID+, задача PAID+.2.1/2.3 (02.09.2026) — той самий підхід,
+    // що `published` щойно вище. `priceUAH` надсилається лише коли
+    // `isPaid: true` (порожній рядок для безкоштовного курсу трактується
+    // сервером як `null`, `readCourseFormFields` в `actions.ts`).
+    formData.append("isPaid", String(values.isPaid));
+    if (values.isPaid) {
+      formData.append("priceUAH", values.priceUAH.trim());
+    }
 
     if (coverFile) {
       formData.append("coverImage", coverFile);
@@ -572,6 +595,50 @@ export function CourseForm({
           </label>
         )}
         {certificateError && <p className="text-sm text-danger">{certificateError}</p>}
+      </div>
+
+      {/* ФАЗА PAID+, задача PAID+.2.1–2.4 (02.09.2026, за прямим
+          проханням користувача — "щоб при створенні чи редагуванні
+          курсу можна було вибирати безкоштовний чи платний курс"). Той
+          самий блок-патерн (Switch + підпис), що "Опубліковано" нижче. */}
+      <div className="flex flex-col gap-2.5 rounded-xl border border-rose-line/50 bg-cream-soft/30 px-4 py-3.5">
+        <div className="flex items-center gap-3">
+          <Switch
+            checked={values.isPaid}
+            onChange={(v) => {
+              update("isPaid", v);
+              // Вимкнення перемикача одразу чистить поле ціни в UI —
+              // дзеркало того, що сервер робить із `priceUAH` при
+              // збереженні (`modules/courses/service.ts`), щоб форма не
+              // показувала стару ціну для щойно зробленого безкоштовним
+              // курсу.
+              if (!v) {
+                update("priceUAH", "");
+                setErrors((prev) => ({ ...prev, priceUAH: undefined }));
+              }
+            }}
+            aria-label="Платний курс"
+          />
+          <span className="text-sm text-ink">Платний курс</span>
+        </div>
+
+        {values.isPaid && (
+          <>
+            <Input
+              label="Ціна (грн)"
+              type="number"
+              min={1}
+              step={1}
+              placeholder="Напр. 1500"
+              value={values.priceUAH}
+              onChange={(e) => update("priceUAH", e.target.value)}
+              error={errors.priceUAH}
+            />
+            <p className="text-xs text-muted">
+              Платний курс буде недоступний студентам, доки не підключено оплату.
+            </p>
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-3">

@@ -52,6 +52,12 @@ export function AdminEditCourseForm({ course }: { course: Course }) {
         trailerUrl: course.introVideoUrl ?? "",
         categories: course.categories ?? [],
         published: course.published,
+        // ФАЗА PAID+, задача PAID+.2.5 — той самий підхід, що решта
+        // полів курсу в цьому об'єкті. `priceUAH` — рядок у формі
+        // (`CourseFormValues`), тому число з БД конвертується в текст;
+        // порожній рядок, якщо `null` (безкоштовний курс).
+        isPaid: course.isPaid,
+        priceUAH: course.priceUAH != null ? String(course.priceUAH) : "",
         coverImage: course.coverImage ?? undefined,
         certificateImage: course.certificateImage ?? undefined,
       }}
