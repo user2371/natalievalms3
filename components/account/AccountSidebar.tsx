@@ -10,6 +10,7 @@ import {
   GearIcon,
   LogoutIcon,
   ShieldIcon,
+  ChatIcon,
 } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,13 @@ export interface AccountSidebarProps {
   className?: string;
   /** Показує пункт "Панель адміністратора" (посилання на `/admin`), якщо `true`. */
   isAdmin?: boolean;
+  /**
+   * MSG+.2.4/.3.1 (03.09.2026): бейдж-число на пункті "Повідомлення" —
+   * підключення лічильника непрочитаних (`useUnreadMessagesCount`,
+   * MSG+.2.4), яке в MSG+.2 було свідомо відкладено до появи реального
+   * пункту меню. `undefined`/`0` — бейдж не рендериться.
+   */
+  unreadMessagesCount?: number;
 }
 
 /**
@@ -25,14 +33,18 @@ export interface AccountSidebarProps {
  * опис задачі 0.8.2 згадував окремий пункт "Рейтинг" — рішення від
  * 13.07.2026 (див. підсумок у `TASKS_DETAILED.md`) прибрало його з нав-меню:
  * місце в рейтингу показується карткою на самій сторінці профілю, а не
- * пунктом сайдбару. Актуальний список: Мій профіль, Моє навчання, Домашні
- * завдання, Сертифікати, Налаштування, Вийти.
+ * пунктом сайдбару. "Повідомлення" додано ФАЗОЮ MSG+, задача MSG+.3.1
+ * (03.09.2026) — тепер `/messages` реальний маршрут (MSG+.3), тож за
+ * аналогією з рештою кабінету. Актуальний список: Мій профіль, Моє
+ * навчання, Домашні завдання, Сертифікати, Повідомлення, Налаштування,
+ * Вийти.
  */
 export const ACCOUNT_NAV_ITEMS = [
   { label: "Мій профіль", href: "/profile", icon: UserIcon },
   { label: "Моє навчання", href: "/my-learning", icon: GraduationCapIcon },
   { label: "Домашні завдання", href: "/homework", icon: UploadIcon },
   { label: "Сертифікати", href: "/certificates", icon: DiplomaIcon },
+  { label: "Повідомлення", href: "/messages", icon: ChatIcon },
   { label: "Налаштування", href: "/settings", icon: GearIcon },
 ];
 
@@ -59,7 +71,7 @@ export const ACCOUNT_NAV_ITEMS = [
  * `AccountLayout` і перевикористовується сторінками `/profile`,
  * `/my-learning`, `/settings`, `/certificates`.
  */
-export function AccountSidebar({ onLogout, className, isAdmin }: AccountSidebarProps) {
+export function AccountSidebar({ onLogout, className, isAdmin, unreadMessagesCount }: AccountSidebarProps) {
   const pathname = usePathname();
 
   return (
@@ -84,6 +96,11 @@ export function AccountSidebar({ onLogout, className, isAdmin }: AccountSidebarP
           >
             <Icon size={18} className={active ? "text-accent-dark" : "text-muted"} />
             {label}
+            {href === "/messages" && !!unreadMessagesCount && (
+              <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-medium text-white">
+                {unreadMessagesCount > 99 ? "99+" : unreadMessagesCount}
+              </span>
+            )}
           </Link>
         );
       })}

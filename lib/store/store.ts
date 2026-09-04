@@ -5,6 +5,7 @@ import commentsReducer from "@/lib/store/slices/commentsSlice";
 import settingsReducer from "@/lib/store/slices/settingsSlice";
 import authModalReducer from "@/lib/store/slices/authModalSlice";
 import progressSyncToastReducer from "@/lib/store/slices/progressSyncToastSlice";
+import messagesReducer from "@/lib/store/slices/messagesSlice";
 
 /**
  * Глобальний стейт-менеджер проєкту — Redux Toolkit.
@@ -45,6 +46,12 @@ export const store = configureStore({
     settings: settingsReducer,
     authModal: authModalReducer,
     progressSyncToast: progressSyncToastReducer,
+    // ФАЗА MSG+, задачі MSG+.2.3/MSG+.2.4 (03.09.2026): Realtime-кеш
+    // повідомлень поточної розмови + сумарний лічильник непрочитаних.
+    // НЕ синхронізується з `localStorage` (див. `messagesSlice.ts`) —
+    // єдиний slice у сторі, для якого це навмисний виняток із загального
+    // патерну "кожен slice дзеркалить `lib/progress/local*.ts`" вище.
+    messages: messagesReducer,
   },
 });
 

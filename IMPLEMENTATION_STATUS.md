@@ -4992,3 +4992,294 @@ my-learning/каталозі — некритична полірування), �
 (адмінська форма) → PAID+.3 (гейтинг сторінок) → PAID+.4 (LiqPay) →
 PAID+.5 (свідомо поза межами/відкриті питання).
 
+## ФАЗА MSG+, задача MSG+.0 — схема приватних повідомлень (03.09.2026)
+
+Лише Prisma-схема + міграція, за прямим проханням користувача ("бери
+MSG+.0 і реалізуй") — модулі/UI/Realtime (MSG+.1–MSG+.4) окремо, ще не
+реалізовано.
+
+Нові моделі: `Conversation` (id, createdAt), `ConversationParticipant`
+(членство + `lastReadAt`-курсор непрочитаного, `@@unique([conversationId,
+userId])`), `Message` (`conversationId`, `senderId` nullable,
+`senderLabel` nullable, `body`, `createdAt`).
+
+**Відхилення від початкового плану в TASKS_DETAILED.md:** прибрано
+окреме поле `readAt` на `Message` (там воно й було закладено спочатку)
+— замінено на `ConversationParticipant.lastReadAt`, оскільки і так
+рахуємо непрочитане per-participant, а два джерела істини для того
+самого — зайве дублювання. Деталі — `TASKS_DETAILED.md`, MSG+.0.2.
+
+**`onDelete` для видалення акаунта (MSG+.5.1):** `Message.senderId` —
+`SetNull`, а не `Cascade` — щоб реальне видалення акаунта (F.24) не
+стирало повідомлення з розмови. `senderLabel` — текстовий знімок імені
+за аналогією з `User.roleChangedByLabel`; сама інтеграція "заповнити
+`senderLabel` і обнулити `senderId` в момент видалення" — окрема
+майбутня задача (F.24 ↔ MSG+.5.1), НЕ входить у цю порцію — зараз лише
+поле в схемі.
+
+**Міграція:** `prisma/migrations/20260903100000_private_messages/`
+написана вручну (той самий відомий виняток, що й у попередніх фазах —
+`prisma migrate dev`/`validate` недоступні в пісочниці, немає мережі
+до `binaries.prisma.sh`; SQL відповідає формату, який генерує сама
+Prisma). Реальне застосування (`npx prisma migrate deploy`) —
+на користувачі локально.
+
+**Перевірка:** `npx prisma validate` підтвердив ту саму мережеву
+відсутність, що й у PAID+ (403 на `binaries.prisma.sh`), а не помилку
+схеми. Схему й SQL перевірено вручну на відповідність наявним
+конвенціям проєкту (`@id @default(uuid())`, `onDelete`-стилі, формат
+FK/index-імен як у попередніх міграціях).
+
+Не входить у цю порцію: `modules/messages` (репозиторій/сервіс/actions,
+MSG+.1), Realtime (MSG+.2), UI (MSG+.3), блокування/репортинг (MSG+.4),
+сама інтеграція видалення акаунта (MSG+.5). Детальний план — далі по
+чекбоксах у `TASKS_DETAILED.md`, розділ "ФАЗА MSG+".
+## ФАЗА MSG+, задача MSG+.1 — модуль `modules/messages` (03.09.2026)
+
+За прямим проханням користувача ("бери MSG+.1 і реалізуй"). Реалізовано
+повний шар schema → repository → service → actions → index, за наявним
+патерном (`modules/comments` як найближчий аналог за формою — контент
+від юзера, пагінація, авторизація "лише учасник").
+
+**Файли:** `modules/messages/schema.ts` (Zod-схеми + типи `Message`/
+`ConversationListItem`/`MessageParticipant`), `repository.ts` (прямі
+Prisma-запити), `service.ts` (валідація + `assertParticipant`),
+`actions.ts` (5 server actions), `index.ts` (публічний експорт).
+
+**Функції:** `startConversationAction` (знайти/створити розмову з
+`recipientId`, заборона писати собі, перевірка існування отримувача),
+`sendMessageAction` (валідація довжини `body` до 4000 символів,
+перевірка учасництва), `listMessagesAction` (курсорна пагінація по
+`id`, найновіші спершу), `listConversationsAction` (список розмов з
+останнім повідомленням і лічильником непрочитаних), `markConversationReadAction`
+(оновлює `ConversationParticipant.lastReadAt`).
+
+**Непрочитані повідомлення:** рахуються через `ConversationParticipant.lastReadAt`
+(MSG+.0.2 рішення — не окремий `readAt` на кожному `Message`). Важливий
+нюанс, врахований у коді: повідомлення видаленого юзера (`senderId IS
+NULL` після F.24, MSG+.5.1) НЕ підпадають під `NOT senderId = userId`
+у SQL (`NULL = x` → `UNKNOWN`, рядок випадає з `WHERE`) — тому явно
+додано `OR senderId IS NULL` до умови підрахунку, інакше такі
+повідомлення ніколи не рахувалися б як непрочитані.
+
+**Realtime (MSG+.2) НЕ підключено** — `sendMessageAction` містить
+коментар-нагадування, де саме додати broadcast після успішного
+`sendMessageService`, коли дійде черга до MSG+.2.
+
+**Відоме обмеження (задокументоване в коді, `repository.ts`):**
+`findConversationBetween`+`createConversation` — не атомарна пара
+операцій; теоретична гонка при одночасному першому повідомленні від
+обох юзерів одне одному замість перевикористання однієї розмови може
+створити дві. Свідомо прийнято для MVP-масштабу (навчальна платформа),
+той самий рівень прагматизму, що вже задокументований у
+`lib/comments/rateLimit.ts` ("не підходить для мультиінстансного/
+serverless деплою... виходить за межі MVP").
+
+**`revalidatePath`:** поки без типізованої форми (`"page"`) — маршруту
+`/messages` ще не існує (UI — MSG+.3, наступна задача); коментар у
+`actions.ts` нагадує перейти на типізований варіант, коли сторінка
+з'явиться (та сама помилка вже була і виправлена раніше в
+`modules/comments/actions.ts` — коментар прямо посилається на цей
+прецедент, щоб не повторити).
+
+**Перевірка:** `npm install`/`prisma generate` недоступні в пісочниці
+(немає мережі до `binaries.prisma.sh`, той самий відомий виняток).
+Прогнано `tsc --noEmit` на нових файлах з тимчасовим `tsconfig`
+(`baseUrl`+шлях `@/*`) — жодної синтаксичної помилки (`TS1xxx`);
+лишились очікувані "модуль не знайдено" (`zod`/`@prisma/client`/
+`next/cache`/`next-auth` — відсутні `node_modules`). Реальний
+type-check у складі проєкту (`npm run build`/`tsc` з повними
+залежностями) і живий прогін — на користувачі локально.
+
+Не входить у цю порцію: Realtime (MSG+.2), UI (MSG+.3),
+блокування/репортинг (MSG+.4), сама інтеграція видалення акаунта
+(MSG+.5) — модуль лише готовий приймати виклики, коли з'являться UI
+й авторизаційний контекст сторінок. Детальний план — далі по
+чекбоксах у `TASKS_DETAILED.md`, розділ "ФАЗА MSG+".
+### MSG+.2 Realtime (Supabase) — 03.09.2026
+
+За прямим проханням користувача ("бери msg+ 2"). Реалізовано MSG+.2.1
+(залежність + env-змінні + RLS-міграція), MSG+.2.2 вже було рішенням
+без коду (позначено раніше), MSG+.2.3 (клієнтський хук підписки на
+розмову) повністю, MSG+.2.4 (лічильник непрочитаних) частково —
+дані/поллінг готові, підключення до навігації свідомо відкладено.
+
+**Залежність:** `@supabase/supabase-js@^2.115.0` — встановлено з
+реального npm-реєстру (на відміну від Prisma engine binaries, реєстр
+був доступний у цій сесії), `package-lock.json` оновлено разом.
+
+**Нові файли:**
+- `lib/realtime/supabaseRealtimeToken.ts` — підписує короткоживучий
+  (60с) JWT для Supabase Realtime на основі `session.user.id` (Auth.js),
+  окремим секретом `SUPABASE_JWT_SECRET` (НЕ `AUTH_SECRET`).
+- `lib/realtime/actions.ts` — `getRealtimeBridgeTokenAction` (server
+  action, userId лише з сесії).
+- `lib/realtime/supabaseClient.ts` — браузерний Supabase-клієнт,
+  синглтон на вкладку, ЛИШЕ для Realtime (не для запитів даних —
+  ті й далі йдуть через `modules/messages/*`/Prisma).
+- `lib/realtime/useConversationRealtime.ts` (MSG+.2.3) — підписка на
+  `postgres_changes`/INSERT `Message` по `conversationId`, дописує в
+  `messagesSlice` без повного refetch; оновлює токен кожні 40с.
+- `lib/realtime/useUnreadMessagesCount.ts` (MSG+.2.4) — поллінг 45с
+  `listConversationsAction`, сума `unreadCount` → `messagesSlice.unreadTotal`.
+- `lib/store/slices/messagesSlice.ts` + підключення в `lib/store/store.ts`
+  (`messages`-reducer, НЕ синхронізується з `localStorage` — навмисний
+  виняток із загального патерну стору, задокументовано в коментарі).
+- `prisma/migrations/20260903110000_messages_realtime_rls/` — RLS на
+  `Conversation`/`ConversationParticipant`/`Message` + додавання
+  `Message` у публікацію `supabase_realtime` (написано вручну, той самий
+  виняток, що й `20260903100000_private_messages/`).
+
+**MSG+.2.4 підключення до навігації — свідомо НЕ зроблено:** у проєкті
+ще немає пункту меню "Повідомлення"/`/messages`-маршруту (перевірено
+`Header.tsx`/`AccountDropdown.tsx` — жодного "leaderboard/points"-бейджа
+поруч із пунктами меню, на який можна було б спертись за аналогією, як
+описував план). Бейдж вимагає реального елемента навігації — це MSG+.3.1,
+не входить сюди. `useUnreadMessagesCount(enabled)` повертає готове число,
+залишається лише підключити виведення.
+
+**Не перевірено в пісочниці:** RLS-політики й Realtime-публікація
+потребують реального Supabase-проєкту (немає мережі/креденшелів тут) —
+міграція документує передумову про роль підключення Prisma (не повинна
+збігатися з `anon`/`authenticated`), яку користувачу варто звірити перед
+застосуванням `npx prisma migrate deploy`.
+
+Не входить у цю порцію: UI (MSG+.3), блокування/репортинг (MSG+.4),
+інтеграція видалення акаунта (MSG+.5).
+### MSG+.3 UI — 03.09.2026
+
+За прямим проханням користувача ("бери msg+3"). Реалізовано всі п'ять
+підзадач UI поверх готових MSG+.1 (`modules/messages`) і MSG+.2
+(Realtime): список розмов, екран розмови, кнопка "Написати повідомлення",
+порожні стани, мобільна адаптивність.
+
+**Нові файли:**
+- `app/messages/layout.tsx` + `app/messages/page.tsx` (MSG+.3.1) —
+  список розмов у `AccountLayout`, картка розмови (аватар/нік/останнє
+  повідомлення/час/бейдж непрочитаних), оновлення при поверненні на
+  вкладку (`visibilitychange`), порожній стан (MSG+.3.4).
+- `app/messages/[conversationId]/page.tsx` (MSG+.3.2) — екран розмови:
+  легший каркас (лише `Header`, без `AccountLayout`), історія +
+  курсорна пагінація "Завантажити старіші повідомлення" (кнопка — той
+  самий патерн, що вже "Показати ще" в `RealCommentsBlock.tsx`, а не
+  scroll-тригер), домердж з `useConversationRealtime` (MSG+.2.3) з
+  дедупом за `id`, збереження позиції скролу при довантаженні, автоскрол
+  донизу для нових/власних повідомлень, Enter/Shift+Enter, позначення
+  прочитаним при відкритті й на кожне нове realtime-повідомлення.
+  "Хто співрозмовник" — перевикористано `listConversationsAction`
+  (пошук за `conversationId`), без нового server action.
+
+**Змінені файли:**
+- `components/account/AccountSidebar.tsx` / `AccountMobileNav.tsx` —
+  пункт "Повідомлення" в `ACCOUNT_NAV_ITEMS` з бейджем непрочитаних;
+  `AccountMobileNav`: `grid-cols-6` → `grid-cols-7`.
+- `components/account/AccountLayout.tsx` — монтує
+  `useUnreadMessagesCount` (MSG+.2.4, один раз, лише коли
+  `status === "authenticated"`) і прокидає результат в обидва нав-
+  компоненти — нарешті підключення, яке MSG+.2.4 свідомо відклала.
+- `app/users/[id]/page.tsx` (MSG+.3.3) — кнопка "Написати повідомлення"
+  на чужому профілі (лише для залогінених відвідувачів) →
+  `startConversationAction` → `router.push("/messages/[id]")`.
+- `modules/messages/actions.ts` — `revalidatePath("/messages")` →
+  типізована форма `revalidatePath("/messages", "page")`, тепер, коли
+  маршрут реально існує (був коментар-нагадування про це ще з MSG+.1).
+
+**Перевірено в цій сесії:** повний `npm install` (реєстр npm доступний),
+`npx tsc --noEmit` — нуль нових помилок (лишились ті самі 20
+передіснуючих `implicit any` в інших модулях, причина одна й та сама
+у всіх — `PrismaClient: any` без реального query engine, не мій код);
+`npx eslint . --max-warnings=0` — чисто по всьому проєкту, включно з
+новими/зміненими файлами.
+
+Не входить у цю порцію: MSG+.4 (модерація/безпека), MSG+.5 (інтеграція
+видалення акаунта).
+
+## ФАЗА MSG+, задачі MSG+.4 і MSG+.5 — модерація/безпека + інтеграція
+видалення акаунта (04.09.2026)
+
+За прямим проханням користувача ("дозаверши все що лишилось в фазі
+msg"). Реалізовано ВСЕ, що лишалось у фазі MSG+: MSG+.4.1
+(блокування + репортинг), MSG+.4.2 (адмін-черга з аудитом переглядів),
+MSG+.4.3 (rate limiting), MSG+.5.1 (анонімізація повідомлень при
+видаленні акаунта). Деталі рішень і того, що саме зроблено — у
+чекбоксах `TASKS_DETAILED.md`, розділи "MSG+.4"/"MSG+.5". Коротко по
+файлах:
+
+- `prisma/schema.prisma` + ручна міграція
+  `prisma/migrations/20260904090000_message_moderation/migration.sql`
+  (той самий відомий виняток — немає мережі до `binaries.prisma.sh` у
+  пісочниці, писано вручну за форматом попередніх MSG+-міграцій) —
+  нові моделі `UserBlock`, `MessageReport`, `ConversationModerationLog`.
+- `lib/messages/rateLimit.ts` (MSG+.4.3) — той самий in-memory-підхід
+  (і той самий відомий виняток: не переживе рестарт/кілька інстансів),
+  що вже `lib/comments/rateLimit.ts`, лише ковзне вікно "N за M
+  секунд" замість мінімального інтервалу.
+- `modules/messages/{schema,repository,service,actions,index}.ts` —
+  дописано: блокування (`blockUserService`/`unblockUserService`/
+  `getBlockStatusService`, `assertNotBlocked` в
+  `startConversationService`/`sendMessageService`), репортинг
+  (`reportMessageService`), rate limit підключено в
+  `sendMessageService`, адмінська трійка
+  (`listMessageReportsService`/`reviewReportService`/
+  `markReportReviewedService`), нова `MessageActor` (замінює
+  розрізнений `userId` там, де потрібен ще й `name`/`email` для
+  текстового знімку).
+- `modules/account/service.ts` (MSG+.5.1) — `deleteAccountService`
+  тепер викликає `anonymizeSenderForDeletedUser` (імпорт напряму з
+  `modules/messages/repository.ts`, той самий precedent, що вже
+  `findUploadedImagePublicIdsForUser` з `modules/certificates/
+  repository.ts`) ПЕРЕД `repository.deleteUserById`.
+- `components/ui/icons.tsx` — новий `FlagIcon` (кнопка "поскаржитись").
+- `components/messages/ReportMessageModal.tsx` — нова модалка скарги
+  (той самий структурний патерн, що `AdminConfirmDeleteModal`).
+- `app/messages/[conversationId]/page.tsx` — кнопка блокування в
+  шапці (`ShieldIcon`), банер замість поля вводу при блокуванні (в
+  БУДЬ-ЯКИЙ бік), кнопка "поскаржитись" (`FlagIcon`) на чужих
+  повідомленнях живих авторів.
+- `app/users/[id]/page.tsx` — помилка `startConversationAction` (напр.
+  через блокування) тепер показується під кнопкою "Написати
+  повідомлення" (раніше мовчки ігнорувалась).
+- `components/admin/AdminReportsList.tsx` + `app/admin/reports/
+  {page,loading}.tsx` (MSG+.4.2) — адмін-черга скарг, той самий патерн,
+  що `AdminCommentsList`/`/admin/comments`.
+- `components/admin/AdminReportReview.tsx` +
+  `app/admin/reports/[reportId]/page.tsx` — читач конкретної скарги:
+  повна переписка (репортнуте повідомлення підсвічене), знімок скарги,
+  історія переглядів (`ConversationModerationLog`), кнопка "Позначити
+  розглянутим". Сторінка викликає `reviewReportService` НАПРЯМУ
+  (Server Component, доступ уже перевірений `middleware.ts` для всього
+  `/admin/**`) — сам виклик і пише рядок аудиту, ще до рендеру.
+- `components/admin/AdminSidebar.tsx` / `AdminMobileNav.tsx` — новий
+  пункт "Скарги" (`ShieldIcon`, `/admin/reports`); мобільна сітка
+  `grid-cols-4` → `grid-cols-5` (той самий ручний перерахунок колонок,
+  що вже MSG+.3.1 робив для `AccountMobileNav`, `grid-cols-6` →
+  `grid-cols-7`).
+
+**Перевірено в цій сесії:** `npx tsc --noEmit` — нуль нових помилок
+(та сама передіснуюча базова лінія `implicit any` через
+`PrismaClient`, що й у попередній порції MSG+.3, +1 такий самий рядок
+у новому `modules/messages/repository.ts` — виправлено явною
+анотацією там, де це мій код); `npx eslint . --max-warnings=0` — чисто.
+**Реальний `prisma migrate deploy`/`prisma generate` НЕ виконувались**
+(немає мережі до `binaries.prisma.sh` у пісочниці) — потрібно на
+машині користувача.
+
+**ФАЗА MSG+ ПОВНІСТЮ ЗАВЕРШЕНА.**
+
+### Пост-фактум виправлення (04.09.2026, той самий день): краш екрана розмови без Supabase env
+
+Користувач повідомив: натискання "Написати повідомлення" виглядало як
+"нічого не відбувається". Причина — НЕ в MSG+.4/MSG+.5 (блокування),
+а в давнішому MSG+.2.3 (`lib/realtime/useConversationRealtime.ts`):
+`getSupabaseRealtimeClient()` кидала виняток СИНХРОННО прямо в тілі
+`useEffect`, коли `NEXT_PUBLIC_SUPABASE_URL`/`_ANON_KEY` не
+налаштовані в `.env` — необроблений виняток валив увесь рендер екрана
+розмови (Next.js "Runtime Error"), хоча власний докблок хука прямо
+описує задум "тиха відмова — realtime не критичний, історія й так
+довантажується окремо". Той самий принцип "тихої відмови", що вже
+застосований нижче для недійсного токена, тепер обгортає й виклик
+`getSupabaseRealtimeClient()` (`try/catch` + `console.warn`, повертає
+рано без підписки) — розмова тепер відкривається й працює (без
+live-оновлень) навіть без налаштованого Supabase. Для реального
+live-realtime користувачу все одно треба задати обидві env-змінні —
+цей фікс лише прибирає крах UI за їх відсутності.

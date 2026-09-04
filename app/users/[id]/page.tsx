@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Header } from "@/components/layout/Header";
 import { AccountLayout } from "@/components/account/AccountLayout";
@@ -14,10 +14,11 @@ import { Button } from "@/components/ui/Button";
 import { ProfileHeroSkeleton } from "@/components/skeletons/ProfileHeroSkeleton";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { CertificateThumbnailSkeleton } from "@/components/skeletons/CertificateThumbnailSkeleton";
-import { EditIcon, ArrowRightIcon } from "@/components/ui/icons";
+import { EditIcon, ArrowRightIcon, ChatIcon } from "@/components/ui/icons";
 import { FALLBACK_AVATAR_SRC } from "@/components/ui/Avatar";
 import { getPublicProfileAction } from "@/modules/profile/actions";
 import { getCertificatesForUserAction } from "@/modules/certificates";
+import { startConversationAction } from "@/modules/messages";
 import type { PublicProfile } from "@/modules/profile/service";
 import type { CertificateEntry } from "@/modules/certificates";
 
@@ -89,9 +90,15 @@ export default function UserProfilePage({ params }: UserProfilePageProps) {
   const { id } = use(params);
   const { data: session, status } = useSession();
   const isOwnProfile = status === "authenticated" && session?.user?.id === id;
+  const router = useRouter();
 
   const [profile, setProfile] = useState<PublicProfile | null | undefined>(undefined);
   const [certificates, setCertificates] = useState<CertificateEntry[]>([]);
+  const [startingConversation, setStartingConversation] = useState(false);
+  // MSG+.4.1 (04.09.2026): `startConversationAction` тепер може впасти
+  // через блокування (`assertNotBlocked`, `modules/messages/service.ts`)
+  // — раніше помилка мовчки ігнорувалась (`result.error` не читався).
+  const [startConversationError, setStartConversationError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,6 +163,29 @@ export default function UserProfilePage({ params }: UserProfilePageProps) {
 
   if (profile === null) {
     notFound();
+  }
+
+  /**
+   * MSG+.3.3 (03.09.2026): кнопка "Написати повідомлення" на чужому
+   * профілі — `startConversationAction` (`modules/messages`, вже готовий з
+   * MSG+.1) знаходить наявну розмову з цим користувачем АБО створює нову,
+   * повертає лише `conversationId` — і одразу перехід на сам екран
+   * розмови (MSG+.3.2), яка сама довантажить історію.
+   */
+  async function handleStartConversation() {
+    if (startingConversation) return;
+    setStartingConversation(true);
+    setStartConversationError(null);
+    try {
+      const result = await startConversationAction({ recipientId: id });
+      if (result.success && result.conversationId) {
+        router.push(`/messages/${result.conversationId}`);
+      } else {
+        setStartConversationError(result.error);
+      }
+    } finally {
+      setStartingConversation(false);
+    }
   }
 
   // Власник завжди бачить своє ДЗ, незалежно від `homeworkVisible` —
@@ -297,7 +327,27 @@ export default function UserProfilePage({ params }: UserProfilePageProps) {
 
       <main className="flex-1 py-8 pb-16 sm:py-10">
         <div className="mx-auto max-w-5xl px-6">
-          <h1 className="font-serif text-3xl text-ink sm:text-4xl">Профіль майстрині</h1>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="font-serif text-3xl text-ink sm:text-4xl">Профіль майстрині</h1>
+            {/* MSG+.3.3: видима лише залогіненому відвідувачу — на чужому неавторизованому перегляді (гість) писати нікому немає сенсу, `startConversationAction` все одно вимагає сесію. */}
+            {status === "authenticated" && (
+              <div className="flex flex-col items-end gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={<ChatIcon size={16} />}
+                  iconPosition="left"
+                  loading={startingConversation}
+                  onClick={handleStartConversation}
+                >
+                  Написати повідомлення
+                </Button>
+                {startConversationError && (
+                  <p className="text-xs text-danger">{startConversationError}</p>
+                )}
+              </div>
+            )}
+          </div>
 
           {heroSection}
           {certificatesSection}

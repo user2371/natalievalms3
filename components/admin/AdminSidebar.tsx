@@ -6,6 +6,7 @@ import {
   GraduationCapIcon,
   ChatIcon,
   UsersIcon,
+  ShieldIcon,
   LogoutIcon,
 } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
@@ -19,12 +20,16 @@ export interface AdminSidebarProps {
  * Пункти навігації адмінки, за мокапом `adminPanel.png` (задача 0.13.1):
  * Курси, Коментарі, Юзери (третій пункт мокап явно показує в сайдбарі,
  * хоча задача 0.13.1 називала його "опційно" — раз він є в макеті, робимо
- * повноцінним пунктом навігації, не опускаємо).
+ * повноцінним пунктом навігації, не опускаємо). "Скарги" — MSG+.4.2
+ * (04.09.2026), `ShieldIcon` — та сама іконка, що вже позначає
+ * адмін-модерацію по проєкту (адмінське видалення коментаря,
+ * `CommentCard`; посилання на адмінку, `AccountDropdown`).
  */
 export const ADMIN_NAV_ITEMS = [
   { label: "Курси", href: "/admin/courses", icon: GraduationCapIcon },
   { label: "Коментарі", href: "/admin/comments", icon: ChatIcon },
   { label: "Юзери", href: "/admin/users", icon: UsersIcon },
+  { label: "Скарги", href: "/admin/reports", icon: ShieldIcon },
 ];
 
 /**

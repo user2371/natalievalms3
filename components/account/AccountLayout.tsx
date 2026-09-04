@@ -6,6 +6,7 @@ import { AccountSidebar } from "@/components/account/AccountSidebar";
 import { AccountMobileNav } from "@/components/account/AccountMobileNav";
 import { useSession, signOut } from "next-auth/react";
 import { GuestGate } from "@/components/account/GuestGate";
+import { useUnreadMessagesCount } from "@/lib/realtime/useUnreadMessagesCount";
 
 export interface AccountLayoutProps {
   user?: { name: string; avatarUrl: string | null } | null;
@@ -70,6 +71,14 @@ export function AccountLayout({
   // деяких сторінках, не для перевірки ролі).
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "ADMIN";
 
+  // MSG+.2.4/.3.1 (03.09.2026): змонтовано ОДИН раз тут (а не в самому
+  // `AccountSidebar`/`AccountMobileNav`, які обидва рендеряться на кожній
+  // сторінці кабінету) — той самий принцип "один поллінг, не два", що вже
+  // задокументований у самому хуку (`lib/realtime/useUnreadMessagesCount.ts`).
+  // Вимкнено, доки сесія не підтверджена (`status === "authenticated"`) —
+  // немає сенсу опитувати `listConversationsAction` для гостя/`GuestGate`.
+  const unreadMessagesCount = useUnreadMessagesCount(status === "authenticated");
+
   if (status === "unauthenticated" && propUser === undefined) {
     return <GuestGate description={description} />;
   }
@@ -84,13 +93,14 @@ export function AccountLayout({
             className="lg:sticky lg:top-24 lg:h-fit"
             onLogout={onLogout}
             isAdmin={isAdmin}
+            unreadMessagesCount={unreadMessagesCount}
           />
 
           <div className="min-w-0">{children}</div>
         </div>
       </main>
 
-      <AccountMobileNav onLogout={onLogout} />
+      <AccountMobileNav onLogout={onLogout} unreadMessagesCount={unreadMessagesCount} />
     </div>
   );
 }

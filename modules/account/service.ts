@@ -4,6 +4,7 @@ import { sendEmailChangeConfirmation } from "@/lib/email/emailChangeMail";
 import { deleteAvatar } from "@/lib/storage/avatarStorage";
 import { deleteCertificateImage } from "@/lib/storage/certificateStorage";
 import { findUploadedImagePublicIdsForUser } from "@/modules/certificates/repository";
+import { anonymizeSenderForDeletedUser } from "@/modules/messages/repository";
 import {
   AVATAR_ALLOWED_MIME_TYPES,
   AVATAR_MAX_SIZE_BYTES,
@@ -183,10 +184,31 @@ export async function confirmEmailChangeService(token: string): Promise<string> 
  *    трохи довше", не "акаунт неможливо видалити". Той самий
  *    компроміс, що вже прийнятий для orphan-cleanup при ЗАВАНТАЖЕННІ
  *    (IMG+.2.4/IMG+.3.4), лише дзеркально для видалення.
- * 4. `repository.deleteUserById` — сам рядок `User`; `onDelete:
+ * 4. **MSG+.5.1 (04.09.2026, інтеграція F.24↔MSG+)**:
+ *    `anonymizeSenderForDeletedUser` (`modules/messages/repository.ts`,
+ *    імпортована напряму, той самий precedent, що вже
+ *    `findUploadedImagePublicIdsForUser` з `modules/certificates/
+ *    repository.ts` — модулі можуть напряму читати/писати чужий
+ *    `repository.ts` для міжмодульної інтеграції, не лише через
+ *    публічний `index.ts`) проставляє `Message.senderLabel = "Видалений
+ *    користувач"` на ВСІХ повідомленнях цього юзера — ОБОВ'ЯЗКОВО
+ *    ПЕРЕД кроком 5 (поки `senderId` ще вказує на живий рядок `User`,
+ *    щоб було що знайти запитом `WHERE senderId = userId`). Рішення
+ *    MSG+.5.1: розмова й самі повідомлення НЕ видаляються — лише
+ *    "відв'язуються" від профілю (той самий підхід, що стандартні
+ *    месенджери, Slack/Discord). `UserBlock`/`ConversationParticipant`
+ *    з участю цього юзера тут НЕ чіпаємо окремо — обидва каскадно
+ *    видаляються самим `onDelete: Cascade` на кроці 5, без потреби в
+ *    текстовому знімку (запис членства/блокування, не вміст переписки,
+ *    той самий принцип, що вже в докблоку над `UserBlock`).
+ * 5. `repository.deleteUserById` — сам рядок `User`; `onDelete:
  *    Cascade` у `prisma/schema.prisma` прибирає решту (курси-записи,
  *    прогрес, коментарі/реакції, бали, здані домашні завдання,
- *    сертифікати) одним запитом.
+ *    сертифікати, членство в розмовах, блокування) одним запитом;
+ *    `Message.senderId`/`MessageReport.reporterId` — `onDelete: SetNull`
+ *    (не Cascade), самі рядки лишаються (крок 4 вище — для повідомлень;
+ *    `MessageReport.reporterLabel` і так уже текстовий знімок з моменту
+ *    подання скарги, оновлювати нема чого).
  *
  * Сесію (JWT, `signOut()`) закриває клієнт (`app/settings/page.tsx`)
  * ПІСЛЯ успішної відповіді цієї дії — той самий порядок, що вже F.7
@@ -226,6 +248,13 @@ export async function deleteAccountService(
       // best-effort — див. docblock вище
     }
   }
+
+  // MSG+.5.1 — див. крок 4 докблоку вище. НЕ best-effort (на відміну від
+  // Cloudinary-очищення) — це звичайний запит до тієї самої Postgres,
+  // де за мить видалиться сам `User`; якщо він впаде, немає сенсу
+  // продовжувати видалення акаунта з наполовину анонімізованою
+  // перепискою.
+  await anonymizeSenderForDeletedUser(userId, "Видалений користувач");
 
   await repository.deleteUserById(userId);
 }

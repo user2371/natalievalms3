@@ -548,3 +548,13 @@ export function EyeIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** Для кнопки "Поскаржитись" на чужому повідомленні (`/messages/[conversationId]`, MSG+.4.1) і для рядка репорту в адмін-черзі (`/admin/reports`, MSG+.4.2). */
+export function FlagIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M6 3v18" />
+      <path d="M6 4.5c1.5-1 3.5-1 5 0s3.5 1 5 0v8c-1.5 1-3.5 1-5 0s-3.5-1-5 0Z" />
+    </svg>
+  );
+}

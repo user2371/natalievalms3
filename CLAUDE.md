@@ -67,39 +67,31 @@ UI-стан одного компонента (значення полів фо�
 
 ## База даних та Prisma CLI
 
-**СУБД: PostgreSQL** (перехід з SQLite виконано 24.07.2026 — деталі й обґрунтування в
-`IMPLEMENTATION_STATUS.md`, розділ 1.27). Локально потрібен реальний запущений сервер
-PostgreSQL — на відміну від SQLite (`file:./dev.db`), тут немає файла бази в репозиторії,
-який просто "запрацював би" одразу після `git clone`.
+**СУБД: PostgreSQL, хоститься на Supabase — НАВІТЬ ЛОКАЛЬНО** (перехід з
+SQLite на PostgreSQL виконано 24.07.2026 — деталі в `IMPLEMENTATION_STATUS.md`,
+розділ 1.27; подальший перехід із локального Docker-Postgres на Supabase-хостинг
+відбувся під час фази MSG+ — Realtime/Postgres Changes (MSG+.2, 03.09.2026)
+слухає зміни лише в базі, якою керує сам Supabase, тож `DATABASE_URL` для
+розробки й продакшену веде на той самий Supabase-проєкт, окремого локального
+сервера БД немає). **Виправлено 04.09.2026** — попередня версія цього розділу
+описувала локальний Docker/нативний Postgres, це застаріло.
 
-**Встановлення PostgreSQL локально — два варіанти:**
+`DATABASE_URL` — рядок підключення з Supabase-проєкту (Project Settings →
+Database → Connection string), а не `localhost`. Для роботи з приватними
+повідомленнями (MSG+) додатково потрібні (`.env`, докладніше —
+`lib/realtime/supabaseClient.ts`/`supabaseRealtimeToken.ts`):
+- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Project
+  Settings → API.
+- `SUPABASE_JWT_SECRET` — Project Settings → API → JWT Settings ("Legacy
+  JWT Secret"); ІНШИЙ секрет, ніж `AUTH_SECRET` — не плутати.
 
-1. **Docker (рекомендовано, найшвидше):**
-   ```bash
-   docker run --name natalieva-postgres \
-     -e POSTGRES_USER=natalieva \
-     -e POSTGRES_PASSWORD=natalieva \
-     -e POSTGRES_DB=natalieva_lms \
-     -p 5432:5432 \
-     -d postgres:16
-   ```
-   Значення (`natalieva`/`natalieva`/`natalieva_lms`) відповідають `DATABASE_URL` за
-   замовчуванням у `.env.example` — можна нічого не міняти. Контейнер лишається
-   запущеним у фоні (`docker ps` — перевірити; `docker stop natalieva-postgres` — зупинити,
-   `docker start natalieva-postgres` — запустити знову, дані зберігаються між рестартами).
-2. **Нативне встановлення** (без Docker): `brew install postgresql@16` (macOS) /
-   `sudo apt install postgresql` (Ubuntu/Debian) / офіційний інсталятор для Windows —
-   після встановлення створити користувача й базу вручну (`createuser natalieva`,
-   `createdb -O natalieva natalieva_lms`) і виставити пароль (`psql -c "ALTER USER
-natalieva WITH PASSWORD 'natalieva';"`).
-
-**Після того, як сервер БД запущений** — стандартний Prisma-флоу (той самий, що й
-раніше, просто тепер справді підключається до сервера, а не до файла):
+**Стандартний Prisma-флоу** (проти реального Supabase-Postgres, не файла):
 
 - `npm install` — підтягує `postinstall`-хук `prisma generate` автоматично
-- `npx prisma migrate dev` — застосовує наявну міграцію
-  (`prisma/migrations/20260724060000_init_postgresql/`) до чистої БД; для нових змін
-  схеми в майбутньому — той самий командою, Prisma сама згенерує нову міграцію
+- `npx prisma migrate deploy` — застосовує наявні міграції (включно з
+  `20260903110000_messages_realtime_rls/` — RLS-політики й додавання
+  `Message` у публікацію `supabase_realtime`, MSG+.2) до Supabase-бази;
+  для нових змін схеми в майбутньому — Prisma сама згенерує нову міграцію
 - `npx prisma db seed` — наповнює БД тестовими даними (запускається автоматично одразу
   після `migrate dev`, якщо БД щойно створена; вручну — командою окремо)
 - `npx prisma studio` — відкрити веб-інтерфейс для огляду та редагування таблиць БД

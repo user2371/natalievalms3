@@ -16,6 +16,7 @@ export interface AdminMobileNavProps {
  * показує лише десктопну версію сайдбару; мобільна адаптація адмінки —
  * Фаза 9 (задача 9.11, "мінімально"), тож тут — базовий робочий варіант,
  * не фінальне полірування.
+ * `grid-cols-5` (04.09.2026, MSG+.4.2) — 4 пункти `ADMIN_NAV_ITEMS` + "Вийти", той самий принцип, що колонки рахувались уручну (`AccountMobileNav`, MSG+.3.1: grid-cols-6 → grid-cols-7).
  */
 export function AdminMobileNav({ onLogout }: AdminMobileNavProps) {
   const pathname = usePathname();
@@ -23,7 +24,7 @@ export function AdminMobileNav({ onLogout }: AdminMobileNavProps) {
   return (
     <nav
       aria-label="Навігація адмінки"
-      className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-rose-line/40 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-rose-line/40 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
     >
       {ADMIN_NAV_ITEMS.map(({ label, href, icon: Icon }) => {
         const active = pathname.startsWith(href);

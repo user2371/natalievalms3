@@ -47,6 +47,30 @@ model User {
   certificates        Certificate[]
   // ФАЗА PAID+, задача PAID+.0.3 — див. докблок над `Course.purchases`.
   purchases           CoursePurchase[]
+  // ФАЗА MSG+, задача MSG+.0.1 — див. докблок над `ConversationParticipant`.
+  conversationMemberships ConversationParticipant[]
+  // ФАЗА MSG+, задача MSG+.0.2 — див. докблок над `Message`. `onDelete:
+  // SetNull` (не Cascade): при реальному видаленні акаунта (F.24)
+  // повідомлення НЕ зникають — лишаються в розмові, `senderId` стає
+  // NULL, а `senderLabel` (заповнюється інтеграцією F.24↔MSG+.5.1,
+  // `modules/account/service.ts`) лишається текстовим знімком.
+  sentMessages            Message[]
+  // ФАЗА MSG+, задача MSG+.4.1 — див. докблок над `UserBlock`. Дві
+  // сторони одного зв'язку: хто заблокував (`blockerId`) і кого
+  // заблокували (`blockedId`) — окремі relation-и, бо це один і той
+  // самий `User` з обох боків FK.
+  blockedUsers            UserBlock[] @relation("BlockerUser")
+  blockedByUsers          UserBlock[] @relation("BlockedUser")
+  // ФАЗА MSG+, задача MSG+.4.1 — див. докблок над `MessageReport`.
+  // `onDelete: SetNull` (та сама причина, що й `Message.senderId`,
+  // MSG+.5.1): скарга — доказ для модерації, лишається читабельною
+  // (`reporterLabel`-знімок) навіть якщо автор скарги видалив акаунт.
+  messageReports          MessageReport[]
+  // ФАЗА MSG+, задача MSG+.4.2 — див. докблок над
+  // `ConversationModerationLog`. `onDelete: SetNull` — аудит-слід
+  // перегляду лишається (`adminLabel`-знімок), навіть якщо той адмін
+  // згодом видалить свій акаунт.
+  moderationLogs          ConversationModerationLog[]
 }
 
 model PendingRegistration {
@@ -421,4 +445,173 @@ model Certificate {
   course Course? @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@unique([userId, courseId])
+}
+
+// ФАЗА MSG+, задача MSG+.0.1 (03.09.2026, за прямим проханням
+// користувача — лише схема, без модулів/UI). Приватна розмова між
+// користувачами. НАВМИСНО без прямих `userAId`/`userBId` на самій
+// моделі — окрема `ConversationParticipant` про запас під майбутні
+// групові розмови (MSG+.6, свідомо поза межами MVP), хоча на рівні
+// сервісу (MSG+.1, наступна задача, не входить у цю міграцію)
+// кількість учасників обмежується до 2, а `findOrCreateConversation`
+// перевикористовує наявну розмову між тими самими двома юзерами
+// замість створення дубліката.
+model Conversation {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  participants ConversationParticipant[]
+  messages     Message[]
+  reports         MessageReport[]
+  moderationLogs  ConversationModerationLog[]
+}
+
+// Членство юзера в розмові + курсор прочитаного (MSG+.0.1). `lastReadAt`
+// — єдине джерело істини для лічильника непрочитаних (`listConversationsForUser`,
+// MSG+.1.1 — рахує `Message`, де `createdAt > lastReadAt` і `senderId != userId`),
+// НАВМИСНО без окремого `readAt` на кожному `Message` — оновлення одного
+// рядка `ConversationParticipant` при "позначити прочитаним" дешевше й
+// простіше, ніж масове оновлення N рядків повідомлень.
+model ConversationParticipant {
+  id             String    @id @default(uuid())
+  conversationId String
+  userId         String
+  lastReadAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Не дозволяє дублювати членство того самого юзера в тій самій розмові;
+  // також те, на що спирається `findOrCreateConversation` (MSG+.1.1) для
+  // пошуку наявної розмови між двома конкретними юзерами.
+  @@unique([conversationId, userId])
+  // Швидкий список розмов конкретного юзера (`listConversationsForUser`).
+  @@index([userId])
+}
+
+// Повідомлення в приватній розмові (MSG+.0.2). Довжина `body` НЕ
+// обмежується на рівні БД (Zod-валідація в `modules/messages/service.ts`,
+// MSG+.1.2, не входить у цю міграцію) — той самий підхід, що вже
+// `CertificateSource`-перевірка полів у `modules/certificates/service.ts`:
+// бізнес-правила в сервісному шарі, не БД-constraint.
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  // Nullable + `onDelete: SetNull` (не Cascade) — рішення MSG+.5.1
+  // (03.09.2026): при реальному видаленні акаунта (F.24) повідомлення
+  // видаленого юзера лишаються в розмові, а не зникають разом з ним.
+  senderId String?
+  // Текстовий знімок імені відправника, за аналогією з
+  // `User.roleChangedByLabel` — NULL, поки userId живий (ім'я береться
+  // через `sender`-релейшн); заповнюється значенням "Видалений
+  // користувач" інтеграцією F.24↔MSG+.5.1
+  // (`modules/account/service.ts`, `anonymizeSenderForDeletedUser`,
+  // 04.09.2026) у момент видалення акаунта, ПЕРЕД тим як `senderId`
+  // стане NULL. Коли `senderId IS NULL` і `senderLabel IS NULL`
+  // (гіпотетичний краш-кейс поза нормальним флоу) — UI показує той
+  // самий дефолтний напис "Видалений користувач" (`displayName`,
+  // `app/messages/**`).
+  senderLabel String?
+  body        String
+  createdAt   DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User?        @relation(fields: [senderId], references: [id], onDelete: SetNull)
+
+  // Пагінація історії розмови курсором по `createdAt` (MSG+.1.1
+  // `listMessages`), не offset — історія розмови може вирости.
+  @@index([conversationId, createdAt])
+
+  reports MessageReport[]
+}
+
+// Блокування одного юзера іншим (MSG+.4.1, рішення 03.09.2026):
+// заблокований `blockedId` не може почати нову розмову з `blockerId` і
+// не може писати в наявну (перевірка — `modules/messages/service.ts`,
+// `assertNotBlocked`, в ОБИДВА боки: розмова "мовчить" для обох, а не
+// лише для того, хто заблокував). Розмова й історія повідомлень НЕ
+// видаляються при блокуванні — той самий принцип, що вже MSG+.5.1
+// (видалення акаунта): блокування ховає можливість ПИСАТИ, не сам факт
+// спілкування, що вже відбулось (може знадобитись для розгляду скарги,
+// MSG+.4.2). `onDelete: Cascade` на обох FK (не SetNull, як у
+// `Message.senderId`) — сам запис блокування без живих `blockerId`/
+// `blockedId` не має сенсу (на відміну від тексту повідомлення, тут
+// нема що "лишати читабельним" знімком).
+model UserBlock {
+  id        String   @id @default(uuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("BlockerUser", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlockedUser", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  // Не дозволяє задублювати той самий напрямок блокування; також те, на
+  // що спирається "чи заблокував Х юзера Y" в `modules/messages/repository.ts`.
+  @@unique([blockerId, blockedId])
+  // Швидка перевірка "чи мене хтось заблокував" (протилежний напрямок
+  // від `@@unique` вище — той самий `findBlockBetween`, MSG+.4.1,
+  // перевіряє обидва напрямки окремими умовами `OR`).
+  @@index([blockedId])
+}
+
+// Скарга на повідомлення (MSG+.4.1, рішення 03.09.2026): кнопка
+// "поскаржитись" на чужому повідомленні. `messageBodySnapshot`/
+// `messageSenderLabel` — текстовий знімок повідомлення НА МОМЕНТ скарги
+// (той самий принцип, що `senderLabel` на `Message`), а не жива посилка
+// на `Message.body` — повідомлення технічно можна відредагувати чи
+// (гіпотетично, поза MVP) видалити пізніше, скарга має лишитись доказом
+// того, що саме бачив скаржник. `reporterId` nullable + `reporterLabel`
+// — той самий F.24-патерн, що `Message.senderId`/`senderLabel`: якщо
+// автор скарги видалить акаунт, сама скарга (доказ для адмін-черги) не
+// повинна зникнути чи стати нечитабельною.
+model MessageReport {
+  id                  String   @id @default(uuid())
+  messageId           String
+  conversationId      String
+  reporterId          String?
+  reporterLabel       String
+  reason              String
+  messageBodySnapshot String
+  messageSenderLabel  String
+  // "PENDING" (у черзі) | "REVIEWED" (адмін переглянув, MSG+.4.2)
+  status              String   @default("PENDING")
+  createdAt           DateTime @default(now())
+
+  message      Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  reporter     User?        @relation(fields: [reporterId], references: [id], onDelete: SetNull)
+
+  moderationLogs ConversationModerationLog[]
+
+  // Список репортів адмін-черги (MSG+.4.2), найновіші/непереглянуті зверху.
+  @@index([status, createdAt])
+  @@index([conversationId])
+}
+
+// Аудит-слід перегляду приватної розмови адміном (MSG+.4.2, рішення
+// 03.09.2026): ADMIN НЕ має вільного доступу до всіх розмов — перегляд
+// можливий лише через конкретний репорт (`messageReportId`), і КОЖЕН
+// такий перегляд логується окремим рядком (не одне поле "хто останній
+// переглянув", як `roleChangedByLabel` на `User` — тут потрібна повна
+// історія переглядів, а не лише останній). `adminLabel` — текстовий
+// знімок "Ім'я (email)" (той самий формат, що `formatActorLabel`,
+// `modules/users/service.ts`), `adminId` nullable + `onDelete: SetNull`
+// — той самий F.24-патерн: лог перегляду лишається читабельним, навіть
+// якщо той адмін пізніше видалить свій акаунт.
+model ConversationModerationLog {
+  id              String   @id @default(uuid())
+  conversationId  String
+  messageReportId String?
+  adminId         String?
+  adminLabel      String
+  viewedAt        DateTime @default(now())
+
+  conversation  Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  messageReport MessageReport? @relation(fields: [messageReportId], references: [id], onDelete: SetNull)
+  admin         User?          @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId])
+  @@index([messageReportId])
 }
