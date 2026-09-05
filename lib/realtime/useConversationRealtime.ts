@@ -51,6 +51,11 @@ export function useConversationRealtime(conversationId: string | null | undefine
     if (!conversationId) {
       return;
     }
+    // TypeScript не звужує тип параметра всередині вкладених замикань
+    // (callback у `.on(...)`, async IIFE нижче) — фіксуємо звужене
+    // значення в `const`, щоб там був гарантований `string`, а не
+    // `string | null | undefined`.
+    const activeConversationId = conversationId;
 
     let cancelled = false;
     let refreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -95,14 +100,14 @@ export function useConversationRealtime(conversationId: string | null | undefine
     // presence).
     function subscribeChannel() {
       const ch = client
-        .channel(`conversation:${conversationId}`)
+        .channel(`conversation:${activeConversationId}`)
         .on(
           "postgres_changes",
           {
             event: "INSERT",
             schema: "public",
             table: "Message",
-            filter: `conversationId=eq.${conversationId}`,
+            filter: `conversationId=eq.${activeConversationId}`,
           },
           (payload) => {
             if (cancelled) return;
@@ -131,14 +136,14 @@ export function useConversationRealtime(conversationId: string | null | undefine
               createdAt: new Date(row.createdAt),
               sender: null,
             };
-            dispatch(realtimeMessageReceived({ conversationId, message }));
+            dispatch(realtimeMessageReceived({ conversationId: activeConversationId, message }));
           },
         )
         .subscribe((status, err) => {
           // ТИМЧАСОВИЙ діагностичний лог — прибрати після підтвердження.
           console.log(
             "MSG+.2.3 debug: статус каналу " +
-              JSON.stringify({ conversationId, status, err: err instanceof Error ? err.message : err }),
+              JSON.stringify({ conversationId: activeConversationId, status, err: err instanceof Error ? err.message : err }),
           );
         });
       return ch;
@@ -164,7 +169,7 @@ export function useConversationRealtime(conversationId: string | null | undefine
       cancelled = true;
       if (refreshTimer) clearInterval(refreshTimer);
       if (channel) void client.removeChannel(channel);
-      dispatch(conversationRealtimeCacheCleared({ conversationId }));
+      dispatch(conversationRealtimeCacheCleared({ conversationId: activeConversationId }));
     };
   }, [conversationId, dispatch]);
 }
