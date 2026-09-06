@@ -218,7 +218,13 @@ export default function ConversationPage({ params }: ConversationPageProps) {
     setMessages((prev) => {
       if (!prev) return prev;
       const known = new Set(prev.map((m) => m.id));
-      const fresh = realtimeMessages.filter((m) => !known.has(m.id));
+      const fresh = realtimeMessages
+        .filter((m) => !known.has(m.id))
+        // `realtimeMessages` (Redux) зберігає `createdAt` як рядок
+        // (Redux вимагає серіалізовні значення в actions/сторі) —
+        // конвертуємо в `Date` тут, у звичайному React `useState`,
+        // де тип `Message` (з `createdAt: Date`) очікується напряму.
+        .map((m) => ({ ...m, createdAt: new Date(m.createdAt) }));
       if (fresh.length === 0) return prev;
       hadFresh = true;
       shouldScrollToBottom.current = true;
