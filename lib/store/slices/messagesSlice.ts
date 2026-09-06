@@ -2,6 +2,18 @@ import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import type { Message } from "@/modules/messages";
 
 /**
+ * Redux вимагає серіалізовні значення в actions/сторі (перевіряється
+ * middleware за замовчуванням) — `Message.createdAt` типу `Date` цій вимозі
+ * не відповідає (виявлено 06.09.2026, коли Broadcast-подія вперше реально
+ * почала доходити до `dispatch` і Redux одразу підсвітив попередження, яке
+ * раніше було "мертвим кодом" через непрацюючий `postgres_changes`).
+ * `SerializedMessage` — те саме, що `Message`, але `createdAt` як ISO-рядок;
+ * конвертація назад у `Date` відбувається в `page.tsx` при домерджуванні в
+ * локальний `useState` (звичайний React-стан не підпадає під цю вимогу).
+ */
+type SerializedMessage = Omit<Message, "createdAt"> & { createdAt: string };
+
+/**
  * `lib/store/slices/messagesSlice.ts` — ФАЗА MSG+, задачі MSG+.2.3/MSG+.2.4
  * (03.09.2026). Той самий підхід, що й `commentsSlice`/`progressSlice`
  * (`lib/store/store.ts`) — крос-компонентний клієнтський кеш, а не
@@ -26,7 +38,7 @@ import type { Message } from "@/modules/messages";
  *   готовий вже зараз.
  */
 interface MessagesState {
-  messagesByConversation: Record<string, Message[]>;
+  messagesByConversation: Record<string, SerializedMessage[]>;
   unreadTotal: number;
   unreadHydrated: boolean;
 }
@@ -44,7 +56,7 @@ const messagesSlice = createSlice({
     /** Нове повідомлення з Realtime-підписки конкретної розмови (`useConversationRealtime`, MSG+.2.3). */
     realtimeMessageReceived(
       state,
-      action: PayloadAction<{ conversationId: string; message: Message }>,
+      action: PayloadAction<{ conversationId: string; message: SerializedMessage }>,
     ) {
       const { conversationId, message } = action.payload;
       const existing = state.messagesByConversation[conversationId] ?? [];
