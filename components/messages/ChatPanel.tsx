@@ -214,19 +214,22 @@ export function ChatPanel({ conversationId, otherParticipant, className }: ChatP
 
   // MSG+.7.9 — виправлення білда: `react-hooks/set-state-in-effect`
   // (нове правило в `eslint-config-next` 16.x) забороняє синхронний виклик
-  // setState прямо в тілі useEffect. Скидання стану чату при перемиканні
-  // розмови тепер відбувається під час рендеру — офіційний патерн React
-  // "adjusting state when a prop changes"
+  // setState прямо в тілі useEffect. Скидання СТАНУ чату при перемиканні
+  // розмови (`messages`/`nextCursor`/`attachedImage`) відбувається під
+  // час рендеру — офіційний патерн React "adjusting state when a prop
+  // changes"
   // (https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes):
-  // `chatKey` порівнюється з уже обробленим значенням, і якщо він змінився,
-  // стан скидається одразу ж, синхронно, до першого малювання нової
-  // розмови (без проміжного кадру зі старими повідомленнями — навіть
-  // краще, ніж було). Сам ефект нижче лишає тільки звернення до сервера.
+  // `chatKey` порівнюється з уже обробленим значенням, і якщо він
+  // змінився, стан скидається одразу ж, синхронно, до першого малювання
+  // нової розмови. `shouldScrollToBottom` — це РЕФ, не стан: React явно
+  // забороняє чіпати `ref.current` під час рендеру
+  // (react-hooks/refs, "Cannot update ref during render") — тому його
+  // мутація лишається в ефекті нижче (той самий ефект, що й так вже
+  // спрацьовує на ту саму зміну `[conversationId, userId]`).
   const [loadedChatKey, setLoadedChatKey] = useState<string | null>(null);
   const chatKey = userId ? `${conversationId}:${userId}` : null;
   if (chatKey && chatKey !== loadedChatKey) {
     setLoadedChatKey(chatKey);
-    shouldScrollToBottom.current = true;
     setMessages(null);
     setNextCursor(null);
     // MSG+.7.8 — перемикання розмови скидає незавершений вибір
@@ -241,6 +244,7 @@ export function ChatPanel({ conversationId, otherParticipant, className }: ChatP
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
+    shouldScrollToBottom.current = true;
     listMessagesAction({ conversationId, cursor: null, limit: MESSAGES_PAGE_SIZE })
       .then((result) => {
         if (cancelled || !result.success) return;
@@ -259,15 +263,6 @@ export function ChatPanel({ conversationId, otherParticipant, className }: ChatP
   useEffect(() => {
     if (!realtimeMessages || realtimeMessages.length === 0 || messages === null) return;
     let hadFresh = false;
-    // MSG+.7.9 — це саме той випадок, який правило `set-state-in-effect`
-    // офіційно вважає ДОПУСТИМИМ виключенням ("Subscribe for updates from
-    // some external system, calling setState... when external state
-    // changes"): ефект синхронізує локальний `messages` із зовнішнім
-    // джерелом (Redux-стор Realtime-повідомлень), а не похідний від
-    // власних props/state цього ж компонента — на відміну від скидання
-    // стану вище, тут немає чистого еквіваленту "обчислити під час
-    // рендеру" без дублювання всієї логіки дедуплікації в `useMemo`.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages((prev) => {
       if (!prev) return prev;
       const known = new Set(prev.map((m) => m.id));

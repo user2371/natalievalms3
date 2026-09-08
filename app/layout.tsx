@@ -6,6 +6,7 @@ import { AuthModalProvider } from "@/components/auth/AuthModalContext";
 import { AuthModalAutoOpen } from "@/components/auth/AuthModalAutoOpen";
 import { RouteTransitionOverlay } from "@/components/layout/RouteTransitionOverlay";
 import { ProgressSyncToast } from "@/components/progress/ProgressSyncToast";
+import { UnreadMessagesPoller } from "@/components/messages/UnreadMessagesPoller";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { StoreProvider } from "@/lib/store/StoreProvider";
 
@@ -84,6 +85,7 @@ export default function RootLayout({
                 <RouteTransitionOverlay />
               </Suspense>
               <ProgressSyncToast />
+              <UnreadMessagesPoller />
               {children}
             </AuthModalProvider>
           </SessionProvider>

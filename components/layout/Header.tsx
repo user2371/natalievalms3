@@ -8,6 +8,7 @@ import { AccountButton } from "@/components/layout/AccountButton";
 import { AccountDropdown } from "@/components/layout/AccountDropdown";
 import { useAuthModal } from "@/components/auth/AuthModalContext";
 import { useSession, signOut } from "next-auth/react";
+import { useAppSelector } from "@/lib/store/hooks";
 
 export interface HeaderUser {
   name: string;
@@ -77,6 +78,18 @@ export function Header({ user: propUser, onLogout: propOnLogout }: HeaderProps) 
   // адміністратора" (F.27.1) і бейджа "M" на власному аватарі (F.27.4).
   const isAdmin = user?.role === "ADMIN";
 
+  // MSG+.8.1 (08.09.2026, за прямим проханням користувача — "зроби такий
+  // самий кружечок [що на пункті "Повідомлення" в сайдбарі] але в
+  // хедері і на всіх сторінках в хедері вкінці біля прізвища
+  // користувача"): читає те саме `messagesSlice.unreadTotal`, що вже
+  // `AccountSidebar`/`AccountMobileNav` (MSG+.2.4/.3.1) — сам поллінг
+  // змонтований один раз в `UnreadMessagesPoller` (`app/layout.tsx`),
+  // тут лише споживання значення пропом у `AccountButton`. `Header`
+  // рендериться на КОЖНІЙ сторінці (лендінг, `/courses`, кабінет тощо),
+  // тому бейдж тепер видно скрізь, а не лише на сторінках кабінету, як
+  // було з бейджем у сайдбарі.
+  const unreadMessagesCount = useAppSelector((state) => state.messages.unreadTotal);
+
   // Fixes (02.08.2026): БУВ `logoutUserAction()` (server action, `modules/auth`)
   // — очищує сесію на сервері, але клієнтський `useSession()` (звідки `user`
   // вище) про це не дізнається без перезавантаження сторінки: server action
@@ -122,6 +135,7 @@ export function Header({ user: propUser, onLogout: propOnLogout }: HeaderProps) 
                     open={dropdownOpen}
                     onToggle={() => setDropdownOpen((v) => !v)}
                     onLogout={onLogout ? () => onLogout() : undefined}
+                    unreadMessagesCount={unreadMessagesCount}
                   />
                 </DropdownTrigger>
                 <DropdownContent align="right">

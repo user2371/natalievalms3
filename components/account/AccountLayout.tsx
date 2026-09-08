@@ -6,7 +6,7 @@ import { AccountSidebar } from "@/components/account/AccountSidebar";
 import { AccountMobileNav } from "@/components/account/AccountMobileNav";
 import { useSession, signOut } from "next-auth/react";
 import { GuestGate } from "@/components/account/GuestGate";
-import { useUnreadMessagesCount } from "@/lib/realtime/useUnreadMessagesCount";
+import { useAppSelector } from "@/lib/store/hooks";
 
 export interface AccountLayoutProps {
   user?: { name: string; avatarUrl: string | null } | null;
@@ -71,13 +71,16 @@ export function AccountLayout({
   // деяких сторінках, не для перевірки ролі).
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "ADMIN";
 
-  // MSG+.2.4/.3.1 (03.09.2026): змонтовано ОДИН раз тут (а не в самому
-  // `AccountSidebar`/`AccountMobileNav`, які обидва рендеряться на кожній
-  // сторінці кабінету) — той самий принцип "один поллінг, не два", що вже
-  // задокументований у самому хуку (`lib/realtime/useUnreadMessagesCount.ts`).
-  // Вимкнено, доки сесія не підтверджена (`status === "authenticated"`) —
-  // немає сенсу опитувати `listConversationsAction` для гостя/`GuestGate`.
-  const unreadMessagesCount = useUnreadMessagesCount(status === "authenticated");
+  // MSG+.8.1 (08.09.2026): БУВ прямий виклик `useUnreadMessagesCount(...)`
+  // тут — сам поллінг переїхав у `UnreadMessagesPoller`
+  // (`app/layout.tsx`, MSG+.8.1), бо тепер бейдж потрібен і в `Header`
+  // на сторінках БЕЗ `AccountLayout` (лендінг, `/courses`,
+  // `/lessons/[slug]` тощо). Виклик хука вдруге тут означав би два
+  // незалежні `setInterval`-поллінги одночасно — замість цього просто
+  // читаємо те саме значення зі стору (`AccountSidebar`/
+  // `AccountMobileNav` нижче й так уже лише СПОЖИВАЮТЬ це число
+  // пропом, не знають про сам поллінг).
+  const unreadMessagesCount = useAppSelector((state) => state.messages.unreadTotal);
 
   if (status === "unauthenticated" && propUser === undefined) {
     return <GuestGate description={description} />;

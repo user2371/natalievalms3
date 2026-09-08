@@ -13,6 +13,13 @@ export interface AccountButtonProps {
   onToggle?: () => void;
   onLogout?: (e: React.MouseEvent) => void;
   className?: string;
+  /**
+   * MSG+.8.1 (08.09.2026): той самий бейдж-число, що на пункті
+   * "Повідомлення" в `AccountSidebar`/`AccountMobileNav`
+   * (MSG+.2.4/.3.1) — тут прикріплений одразу після імені в Header.
+   * `undefined`/`0` — бейдж не рендериться.
+   */
+  unreadMessagesCount?: number;
 }
 
 export function AccountButton({
@@ -23,6 +30,7 @@ export function AccountButton({
   onToggle,
   onLogout,
   className,
+  unreadMessagesCount,
 }: AccountButtonProps) {
   return (
     <button
@@ -36,7 +44,19 @@ export function AccountButton({
       )}
     >
       <Avatar name={name} src={avatarUrl} size={32} role={role} />
-      <span className="hidden text-sm font-medium text-ink sm:inline">{name}</span>
+      {/* MSG+.8.1 — ім'я + бейдж непрочитаних згруповані в один
+          прихований-на-мобільному блок (той самий `hidden sm:` поділ,
+          що й раніше на самому імені): бейдж завжди йде ВІДРАЗУ ПІСЛЯ
+          прізвища, тож не лишається "сиротою" без підпису на екранах,
+          де саме ім'я приховане. */}
+      <span className="hidden items-center gap-2 sm:flex">
+        <span className="text-sm font-medium text-ink">{name}</span>
+        {!!unreadMessagesCount && (
+          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-medium text-white">
+            {unreadMessagesCount > 99 ? "99+" : unreadMessagesCount}
+          </span>
+        )}
+      </span>
       {open ? (
         <ChevronUpIcon size={16} className="text-accent-dark" />
       ) : (
