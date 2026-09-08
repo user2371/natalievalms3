@@ -100,11 +100,33 @@ export async function findParticipant(conversationId: string, userId: string) {
 
 /**
  * Список розмов користувача — з даними другого учасника, останнім
- * повідомленням і лічильником непрочитаних. N+1 на лічильник непрочитаних
- * (один `count`-запит на розмову, паралельно через `Promise.all`) —
- * прийнятно для очікуваної кількості розмов одного юзера на MVP-масштабі
- * (навчальна платформа), той самий рівень прагматизму, що й
- * `findConversationBetween` вище.
+ * повідомленням і лічильником непрочитаних.
+ *
+ * MSG+.8.2 (08.09.2026, за прямим проханням користувача — фікс
+ * навантаження поллінгу на Supabase): БУВ N+1 — окремий
+ * `prisma.message.count()` на кожну розмову користувача (паралельно
+ * через `Promise.all`), прийнятний для MVP, але вже небажаний, коли
+ * той самий список читає й глобальний поллінг бейджа
+ * (`useUnreadMessagesCount`, MSG+.2.4) з кожної відкритої вкладки
+ * кожного залогіненого юзера. Замінено на ОДИН агрегатний SQL-запит
+ * (`$queryRaw` — Prisma не має декларативного API для "count зі своїм
+ * порогом на рядок", бо поріг (`lastReadAt`) різний для кожної
+ * розмови; SQL виражає це звичайним `JOIN` за умовою `cp."userId" =
+ * ${userId}`, що заразом і фільтрує тільки розмови ЦЬОГО юзера —
+ * окремий `WHERE conversationId IN (...)` не потрібен). Семантика
+ * лічильника — та сама, що була в JS-версії: `senderId IS DISTINCT
+ * FROM userId` — це те саме, що колишнє `OR: [{ senderId: { not:
+ * userId } }, { senderId: null }]` (Postgres `IS DISTINCT FROM`
+ * коректно обробляє `NULL`, на відміну від звичайного `!=`).
+ * `TIMESTAMP '1970-01-01 00:00:00'` (без time zone) — той самий поріг
+ * за замовчуванням, що раніше `new Date(0)`, підібраний під реальний
+ * тип колонки в БД (`TIMESTAMP(3)` без tz, див. міграцію
+ * `20260903100000_private_messages`) — свідомо БЕЗ `to_timestamp(0)`
+ * (той повертає `timestamptz`, що при порівнянні з `timestamp`-колонкою
+ * без tz залежав би від сесійного `TimeZone` Postgres).
+ *
+ * Тепер запитів рівно 2 незалежно від кількості розмов користувача
+ * (був 1 + N), а не 1 на розмову.
  */
 export async function listConversationsForUser(userId: string): Promise<ConversationListItem[]> {
   const participations = await prisma.conversationParticipant.findMany({
@@ -130,33 +152,30 @@ export async function listConversationsForUser(userId: string): Promise<Conversa
     },
   });
 
-  const items = await Promise.all(
-    participations.map(async (participation) => {
-      const { conversation } = participation;
-      const lastMessage = conversation.messages[0] ?? null;
+  const unreadRows = await prisma.$queryRaw<Array<{ conversationId: string; unreadCount: number }>>`
+    SELECT m."conversationId" AS "conversationId", COUNT(*)::int AS "unreadCount"
+    FROM "Message" m
+    JOIN "ConversationParticipant" cp
+      ON cp."conversationId" = m."conversationId" AND cp."userId" = ${userId}
+    WHERE m."createdAt" > COALESCE(cp."lastReadAt", TIMESTAMP '1970-01-01 00:00:00')
+      AND m."senderId" IS DISTINCT FROM ${userId}
+    GROUP BY m."conversationId"
+  `;
+  const unreadByConversation = new Map(unreadRows.map((row) => [row.conversationId, row.unreadCount]));
 
-      // `NULL` (видалений автор, `senderId` — `SetNull`, MSG+.0.4) НЕ
-      // рахується "моїм" повідомленням у `NOT senderId = userId` (в SQL
-      // `NULL = x` — `UNKNOWN`, рядок випадає з `WHERE`), тому явно
-      // додаємо `senderId: null` в `OR` — інакше повідомлення видалених
-      // юзерів ніколи не рахувалися б як непрочитані.
-      const unreadCount = await prisma.message.count({
-        where: {
-          conversationId: participation.conversationId,
-          createdAt: { gt: participation.lastReadAt ?? new Date(0) },
-          OR: [{ senderId: { not: userId } }, { senderId: null }],
-        },
-      });
+  const items = participations.map((participation) => {
+    const { conversation } = participation;
+    const lastMessage = conversation.messages[0] ?? null;
+    const unreadCount = unreadByConversation.get(participation.conversationId) ?? 0;
 
-      return {
-        id: conversation.id,
-        createdAt: conversation.createdAt,
-        otherParticipant: conversation.participants[0]?.user ?? null,
-        lastMessage,
-        unreadCount,
-      } satisfies ConversationListItem;
-    }),
-  );
+    return {
+      id: conversation.id,
+      createdAt: conversation.createdAt,
+      otherParticipant: conversation.participants[0]?.user ?? null,
+      lastMessage,
+      unreadCount,
+    } satisfies ConversationListItem;
+  });
 
   // Найактивніші розмови зверху — за часом останнього повідомлення, а не
   // за `createdAt` самої розмови (щойно створена без повідомлень ще
