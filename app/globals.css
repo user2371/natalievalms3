@@ -146,3 +146,43 @@ body {
   color: var(--color-ink);
   text-align: left;
 }
+
+/*
+ * ФАЗА SCROLL+, задача SCROLL+.1.1 (08.09.2026, уповільнено за прямим
+ * проханням користувача — "трохи повільніше бо майже непомітно
+ * ефекту"). Scroll-reveal анімація для секцій лендінгу
+ * (`components/landing/ScrollReveal.tsx`) — базовий стан ховає блок
+ * (прозорий, зсунутий на 70px вниз), `.is-visible` (додається
+ * `IntersectionObserver`-ом при вході у viewport) плавно "піднімає"
+ * його на місце за 1.3s. `cubic-bezier(0.16, 1, 0.3, 1)` ("ease-out
+ * expo") — швидкий старт і м'яке гальмування в кінці, без пружинного
+ * перебігу за межу.
+ *
+ * SCROLL+.1.1: було 40px / 0.7s — при звичайній швидкості скролу
+ * ефект встигав завершитись майже одразу й лишався непомітним;
+ * збільшено зсув (помітніший "підйом") і тривалість (ефект розтягнуто
+ * в часі, тому видно сам рух, а не лише миттєву зміну).
+ */
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(70px);
+  transition:
+    opacity 1.3s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 1.3s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.scroll-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Людям з увімкненим "зменшити рух" — показуємо контент одразу, без
+   анімації зсуву/прозорості. */
+@media (prefers-reduced-motion: reduce) {
+  .scroll-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

@@ -13,17 +13,30 @@ export interface AccountMobileNavProps {
 }
 
 /**
+ * MOBILENAV+.1.1 (08.09.2026, за прямим проханням користувача — "на
+ * мобілці забери внизу лінки домашнє завдання, та сертифікати бо для
+ * них мало місця"): нижнє меню — вужчий підмножинний список порівняно з
+ * повним `ACCOUNT_NAV_ITEMS` десктопного `AccountSidebar`. "Домашні
+ * завдання" й "Сертифікати" прибрано ЛИШЕ звідси (не з
+ * `ACCOUNT_NAV_ITEMS` — десктопний сайдбар і далі показує всі пункти);
+ * обидві сторінки лишаються доступними на мобільному іншими шляхами
+ * (картки на `/profile`, `/my-learning`), просто без власної кнопки в
+ * тісній нижній панелі.
+ */
+const MOBILE_NAV_ITEMS = ACCOUNT_NAV_ITEMS.filter(
+  ({ href }) => href !== "/homework" && href !== "/certificates",
+);
+
+/**
  * Нижнє меню кабінету на мобільному (задача 0.8.8): фіксована панель знизу
- * екрана з тими самими пунктами, що й `AccountSidebar` (Мій профіль/Моє
- * навчання/Домашні завдання/Сертифікати/Повідомлення/Налаштування) + "Вийти".
- * Видима лише нижче `lg` (`lg:hidden`) — на десктопі замість неї показується
- * повний вертикальний `AccountSidebar`.
+ * екрана. Видима лише нижче `lg` (`lg:hidden`) — на десктопі замість неї
+ * показується повний вертикальний `AccountSidebar`.
  *
- * `grid-cols-7` (МСГ+.3.1, 03.09.2026): БУЛО `grid-cols-6` — точно
- * дорівнювало кількості пунктів на момент задачі 0.8.8 (5 + "Вийти").
- * Додавання "Повідомлення" (`ACCOUNT_NAV_ITEMS`) зробило б 7-й пункт
- * розтягнутим на всю ширину лишньої 6-ї колонки замість власної, якби
- * число колонок лишилось незмінним — оновлено разом із самим списком.
+ * `grid-cols-5` (MOBILENAV+.1.1, 08.09.2026): БУЛО `grid-cols-7` — 6
+ * пунктів `ACCOUNT_NAV_ITEMS` + "Вийти", але 7 колонок на вузькому
+ * екрані лишали замало місця на пункт (за прямим проханням користувача
+ * прибрано "Домашні завдання" й "Сертифікати" — див. `MOBILE_NAV_ITEMS`
+ * вище); тепер 4 пункти + "Вийти" = 5 колонок.
  *
  * "Вийти" тут явно потрібен: кнопка "Вихід" в `AccountButton` (хедер)
  * прихована нижче `sm`, тож без цього пункту логаут був би недоступний на
@@ -35,9 +48,9 @@ export function AccountMobileNav({ onLogout, unreadMessagesCount }: AccountMobil
   return (
     <nav
       aria-label="Навігація кабінету"
-      className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-7 border-t border-rose-line/40 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-rose-line/40 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
     >
-      {ACCOUNT_NAV_ITEMS.map(({ label, href, icon: Icon }) => {
+      {MOBILE_NAV_ITEMS.map(({ label, href, icon: Icon }) => {
         const [hrefPath] = href.split("#");
         const active = hrefPath === pathname;
 

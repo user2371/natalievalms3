@@ -1,4 +1,5 @@
 import { Header } from "@/components/layout/Header";
+import { ScrollReveal } from "@/components/landing/ScrollReveal";
 import { DecorativeBackground } from "@/components/landing/DecorativeBackground";
 import { HeroSection } from "@/components/landing/HeroSection";
 import { AudienceSection } from "@/components/landing/AudienceSection";
@@ -39,6 +40,12 @@ export const dynamic = "force-dynamic";
  * `.catch(() => [])`/`.catch(() => null)` — щоб недоступність БД (напр.
  * без мережі до Prisma engine) не валила рендер усього лендінгу, а
  * просто лишала секції на статичних фолбек-даних, як і до цієї задачі.
+ *
+ * ФАЗА SCROLL+ (08.09.2026): кожна секція лендінгу обгорнута в
+ * `<ScrollReveal>` (`components/landing/ScrollReveal.tsx`) — клієнтський
+ * компонент-обгортка, сам `Home` лишається серверним компонентом
+ * (`ScrollReveal` лише додає `ref`/клас навколо вже відрендерених дітей,
+ * client/server-межа проходить рівно по ньому).
  */
 export default async function Home() {
   const featuredCourse = await getFeaturedCourseAction().catch(() => null);
@@ -54,23 +61,39 @@ export default async function Home() {
 
       <main className="relative flex-1">
         <DecorativeBackground />
-        <HeroSection
-          featuredCourse={featuredCourse}
-          realLessonsByCourseId={realLessonsByCourseId}
-        />
-        <AudienceSection />
-        <ProgramSection
-          featuredCourse={featuredCourse}
-          realLessonsByCourseId={realLessonsByCourseId}
-        />
-        <StepsSection />
-        <IntroSection featuredCourse={featuredCourse} />
-        <MasterSection featuredCourse={featuredCourse} />
-        <TestimonialsSection />
-        <CtaBanner
-          featuredCourse={featuredCourse}
-          realLessonsByCourseId={realLessonsByCourseId}
-        />
+        <ScrollReveal>
+          <HeroSection
+            featuredCourse={featuredCourse}
+            realLessonsByCourseId={realLessonsByCourseId}
+          />
+        </ScrollReveal>
+        <ScrollReveal>
+          <AudienceSection />
+        </ScrollReveal>
+        <ScrollReveal>
+          <ProgramSection
+            featuredCourse={featuredCourse}
+            realLessonsByCourseId={realLessonsByCourseId}
+          />
+        </ScrollReveal>
+        <ScrollReveal>
+          <StepsSection />
+        </ScrollReveal>
+        <ScrollReveal>
+          <IntroSection featuredCourse={featuredCourse} />
+        </ScrollReveal>
+        <ScrollReveal>
+          <MasterSection featuredCourse={featuredCourse} />
+        </ScrollReveal>
+        <ScrollReveal>
+          <TestimonialsSection />
+        </ScrollReveal>
+        <ScrollReveal>
+          <CtaBanner
+            featuredCourse={featuredCourse}
+            realLessonsByCourseId={realLessonsByCourseId}
+          />
+        </ScrollReveal>
       </main>
 
       <Footer />
