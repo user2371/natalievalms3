@@ -514,7 +514,24 @@ model Message {
   // `app/messages/**`).
   senderLabel String?
   body        String
-  createdAt   DateTime @default(now())
+  // MSG+.7.8 (07.09.2026, за прямим проханням користувача — "додай
+  // можливість... прикріпляти зображення в чаті") — вкладене зображення
+  // повідомлення. Nullable: більшість повідомлень і далі текстові.
+  // `body` для повідомлення-лише-з-зображенням зберігається як порожній
+  // рядок (`SendMessageSchema` у `modules/messages/schema.ts` вимагає
+  // непорожнім РІВНО ОДНЕ з двох — `body` або `imageUrl`, не саме поле
+  // `body`) — той самий підхід, що вже `Course.certificateImage`
+  // (nullable-URL-поле поверх наявної текстової моделі, CERTTPL+.0.1).
+  imageUrl String?
+  // `public_id` у Cloudinary — потрібен лише для можливого майбутнього
+  // видалення файлу (`deleteMessageImage`, `lib/storage/
+  // messageImageStorage.ts`); НЕ використовується для відображення (для
+  // цього досить `imageUrl`). Той самий "свідомо не викликається зараз"
+  // підхід, що вже `deleteHomeworkImage`/`deleteCertificateImage` —
+  // видалення повідомлень поза межами MVP цього проєкту, тож
+  // сирітські файли в Cloudinary тут теоретично можливі, як і там.
+  imagePublicId String?
+  createdAt     DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User?        @relation(fields: [senderId], references: [id], onDelete: SetNull)

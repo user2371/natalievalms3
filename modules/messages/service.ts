@@ -99,6 +99,24 @@ export async function startConversationService(
   return repository.createConversation(userId, recipientId);
 }
 
+/**
+ * MSG+.4.1 — учасники розмови, знайдені окремо через `findParticipant`,
+ * охоплюють лише запис ПОТОЧНОГО юзера, не другого учасника — тому
+ * перевірка блокування шукає другого учасника окремо (`listConversationsForUser`
+ * тут не підходить, то список УСІХ розмов юзера, зайве навантаження
+ * заради одного `otherParticipant`). Спільний хелпер для
+ * `sendMessageService` і `assertCanUploadMessageImage` (MSG+.7.8) — той
+ * самий подвійний захист "не лише учасник розмови, а й ніхто нікого не
+ * заблокував" перед КОЖНОЮ дією над конкретною розмовою.
+ */
+async function assertNotBlockedInConversation(conversationId: string, userId: string): Promise<void> {
+  const participants = await repository.listParticipantsForConversation(conversationId);
+  const other = participants.find((p) => p.id !== userId);
+  if (other) {
+    await assertNotBlocked(userId, other.id);
+  }
+}
+
 export async function sendMessageService(userId: string, input: SendMessageInput) {
   const parsed = SendMessageSchema.safeParse(input);
   if (!parsed.success) {
@@ -114,24 +132,31 @@ export async function sendMessageService(userId: string, input: SendMessageInput
     throw new Error("Забагато повідомлень поспіль. Зачекайте трохи й спробуйте ще раз.");
   }
 
-  // MSG+.4.1 — учасники розмови вже завантажені у `findParticipant` вище
-  // лише частково (лише запис поточного юзера, не другого учасника),
-  // тому для перевірки блокування шукаємо другого учасника окремо —
-  // `listConversationsForUser` тут не підходить (то список УСІХ розмов
-  // юзера, зайве навантаження заради одного `otherParticipant`).
-  const participants = await repository.listParticipantsForConversation(parsed.data.conversationId);
-  const other = participants.find((p) => p.id !== userId);
-  if (other) {
-    await assertNotBlocked(userId, other.id);
-  }
+  await assertNotBlockedInConversation(parsed.data.conversationId, userId);
 
   const message = await repository.createMessage({
     conversationId: parsed.data.conversationId,
     senderId: userId,
     body: parsed.data.body,
+    imageUrl: parsed.data.imageUrl ?? null,
   });
   recordMessageSent(userId);
   return message;
+}
+
+/**
+ * MSG+.7.8 (07.09.2026) — перевірка ПЕРЕД аплоадом зображення-вкладення
+ * (`uploadMessageImageAction` → `uploadService.uploadMessageImageService`):
+ * той самий подвійний захист "учасник розмови + ніхто нікого не
+ * заблокував", що вже `sendMessageService`, лише БЕЗ rate-limit
+ * (`isMessageRateLimited`/`recordMessageSent`) — сам аплоад ще не є
+ * надісланим повідомленням (rate-limit застосовується один раз, у
+ * момент фактичного `sendMessageService`, коли повідомлення з уже
+ * завантаженим `imageUrl` реально потрапляє в розмову).
+ */
+export async function assertCanUploadMessageImage(userId: string, conversationId: string): Promise<void> {
+  await assertParticipant(conversationId, userId);
+  await assertNotBlockedInConversation(conversationId, userId);
 }
 
 export async function listMessagesService(userId: string, input: ListMessagesInput) {

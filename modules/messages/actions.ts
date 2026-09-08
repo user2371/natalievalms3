@@ -12,8 +12,10 @@ import {
   SendMessageInput,
   StartConversationInput,
   UnblockUserInput,
+  UploadMessageImageSchema,
 } from "./schema";
 import * as service from "./service";
+import { uploadMessageImageService } from "./uploadService";
 
 /**
  * `modules/messages/actions.ts` — ФАЗА MSG+, задача MSG+.1.3 (03.09.2026).
@@ -76,6 +78,48 @@ export async function sendMessageAction(input: SendMessageInput) {
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : "Не вдалося надіслати повідомлення";
     return { success: false as const, message: null, error: errMessage };
+  }
+}
+
+/**
+ * `uploadMessageImage` — ФАЗА MSG+, задача MSG+.7.8 (07.09.2026, за
+ * прямим проханням користувача — "додай можливість... прикріпляти
+ * зображення в чаті"). Двоетапний флоу (той самий, що вже
+ * `uploadHomeworkImageAction`): цей виклик лише завантажує файл і
+ * повертає готовий Cloudinary `url`, сам виклик `sendMessageAction`
+ * (з уже готовим `imageUrl` у `SendMessageInput`) — окрема наступна
+ * дія, коли користувач натискає "Надіслати". Перевірка доступу — той
+ * самий подвійний захист, що `sendMessageService`
+ * (`service.assertCanUploadMessageImage`: учасник розмови + ніхто
+ * нікого не заблокував), БЕЗ rate-limit — сам аплоад ще не лічиться
+ * надісланим повідомленням.
+ */
+export async function uploadMessageImageAction(formData: FormData) {
+  try {
+    const session = await auth();
+    const userId = session?.user?.id;
+    if (!userId) {
+      throw new Error("Потрібно увійти, щоб прикріпити зображення");
+    }
+
+    const parsed = UploadMessageImageSchema.safeParse({
+      conversationId: formData.get("conversationId"),
+    });
+    if (!parsed.success) {
+      throw new Error(parsed.error.issues[0]?.message || "Не вказано розмову");
+    }
+    const image = formData.get("image");
+    if (!(image instanceof File)) {
+      throw new Error("Не передано файл зображення");
+    }
+
+    await service.assertCanUploadMessageImage(userId, parsed.data.conversationId);
+
+    const result = await uploadMessageImageService(parsed.data.conversationId, image);
+    return { success: true as const, url: result.url, error: null };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Не вдалося завантажити зображення";
+    return { success: false as const, url: null, error: message };
   }
 }
 

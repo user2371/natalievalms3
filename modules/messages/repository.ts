@@ -29,6 +29,7 @@ function mapMessage(raw: {
   senderId: string | null;
   senderLabel: string | null;
   body: string;
+  imageUrl: string | null;
   createdAt: Date;
   sender: MessageParticipant | null;
 }): Message {
@@ -38,6 +39,7 @@ function mapMessage(raw: {
     senderId: raw.senderId,
     senderLabel: raw.senderLabel,
     body: raw.body,
+    imageUrl: raw.imageUrl,
     createdAt: raw.createdAt,
     sender: raw.sender,
   };
@@ -200,6 +202,8 @@ export interface CreateMessageData {
   conversationId: string;
   senderId: string;
   body: string;
+  /** MSG+.7.8 — `null`/`undefined` для звичайного текстового повідомлення. */
+  imageUrl?: string | null;
 }
 
 export async function createMessage(data: CreateMessageData): Promise<Message> {
@@ -208,6 +212,7 @@ export async function createMessage(data: CreateMessageData): Promise<Message> {
       conversationId: data.conversationId,
       senderId: data.senderId,
       body: data.body,
+      imageUrl: data.imageUrl ?? null,
     },
     include: { sender: { select: PARTICIPANT_SELECT } },
   });

@@ -558,3 +558,50 @@ export function FlagIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** Кнопка "Надіслати" в полі вводу чату (`ChatPanel`, MSG+.7.1 — редизайн `/messages` під спліт-в'ю макет). */
+export function SendIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M21 3 3 10.5l7.5 3L14 21l7-18Z" />
+      <path d="M10.5 13.5 21 3" />
+    </svg>
+  );
+}
+
+/**
+ * Кнопка "прикріпити файл" у полі вводу чату — лише візуальна, БЕЗ
+ * реальної дії (вкладення в повідомленнях свідомо поза межами MVP,
+ * див. "MSG+.6 Свідомо поза межами цієї фази" в `TASKS_DETAILED.md`).
+ * `ChatPanel` рендерить кнопку `disabled` з `title`-підказкою, той самий
+ * принцип чесності UI, що вже в проєкті — не імітувати неготову функцію.
+ */
+export function PaperclipIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 12.5V7a4 4 0 0 1 8 0v9a2.5 2.5 0 0 1-5 0V8" />
+    </svg>
+  );
+}
+
+/** Кнопка "емодзі" в полі вводу чату — той самий статус, що `PaperclipIcon` (лише візуальна, `disabled`, поза межами MVP). */
+export function SmileIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 10.5h.01M15.5 10.5h.01" strokeLinecap="round" strokeWidth="2.4" />
+      <path d="M8 14.5c1 1.3 2.4 2 4 2s3-.7 4-2" />
+    </svg>
+  );
+}
+
+/** Меню "..." (Заблокувати/Розблокувати, Поскаржитись) у шапці `ChatPanel` — три вертикальні крапки, той самий `base()`-стиль, що решта іконок набору. */
+export function MoreVerticalIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="5.5" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="18.5" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}

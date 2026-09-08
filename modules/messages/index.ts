@@ -7,6 +7,7 @@
 export {
   startConversationAction,
   sendMessageAction,
+  uploadMessageImageAction,
   listMessagesAction,
   listConversationsAction,
   markConversationReadAction,
@@ -22,6 +23,7 @@ export {
   listConversationsService,
   startConversationService,
   sendMessageService,
+  assertCanUploadMessageImage,
   listMessagesService,
   markConversationReadService,
   blockUserService,
@@ -36,6 +38,9 @@ export type { MessageActor } from "./service";
 export {
   StartConversationSchema,
   SendMessageSchema,
+  UploadMessageImageSchema,
+  MESSAGE_IMAGE_MAX_SIZE_BYTES,
+  MESSAGE_IMAGE_ALLOWED_MIME_TYPES,
   ListMessagesSchema,
   MarkConversationReadSchema,
   BlockUserSchema,
@@ -51,6 +56,7 @@ export type {
   ConversationListItem,
   StartConversationInput,
   SendMessageInput,
+  UploadMessageImageInput,
   ListMessagesInput,
   MarkConversationReadInput,
   BlockUserInput,

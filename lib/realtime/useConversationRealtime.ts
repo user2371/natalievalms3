@@ -52,6 +52,12 @@ type BroadcastMessageRecord = {
   senderId: string | null;
   senderLabel: string | null;
   body: string;
+  // MSG+.7.8 (07.09.2026) — сирий рядок "Message" з тригера
+  // (`broadcast_message_changes`, міграція `20260906000000_messages_
+  // broadcast_from_db`) несе ВЕСЬ рядок таблиці, тож нове поле
+  // з'являється тут само собою без зміни самого тригера/SQL — лише
+  // тип нижче потребує оновлення, щоб TypeScript знав про нього.
+  imageUrl: string | null;
   createdAt: string;
 };
 
@@ -134,6 +140,7 @@ export function useConversationRealtime(conversationId: string | null | undefine
               senderId: row.senderId,
               senderLabel: row.senderLabel,
               body: row.body,
+              imageUrl: row.imageUrl,
               createdAt: row.createdAt,
               sender: null,
             };

@@ -78,12 +78,24 @@ export function DropdownTrigger({ children }: { children: ReactNode }) {
 export interface DropdownContentProps {
   children: ReactNode;
   align?: "left" | "right";
+  /**
+   * MSG+.7.8-фікс (07.09.2026) — куди розкривається панель відносно
+   * тригера. За замовчуванням `"bottom"` (як і раніше, увесь наявний
+   * код на це покладається). `"top"` потрібен для `EmojiPickerDropdown`
+   * у `ChatPanel.tsx`: кнопка емодзі стоїть у футері форми, самому низу
+   * картки чату (`overflow-hidden rounded-3xl` у
+   * `MessagesSplitView.tsx`, щоб не вилазило за заокруглені кути) —
+   * панель, що розкривається ВНИЗ, там просто не мала б місця й
+   * обрізалась би цим `overflow-hidden`, лишаючись фактично невидимою.
+   */
+  side?: "top" | "bottom";
   className?: string;
 }
 
 export function DropdownContent({
   children,
   align = "right",
+  side = "bottom",
   className,
 }: DropdownContentProps) {
   const { open } = useDropdownContext();
@@ -93,7 +105,8 @@ export function DropdownContent({
     <div
       role="menu"
       className={cn(
-        "absolute top-full z-20 mt-2 min-w-[220px] rounded-2xl border border-rose-line/40 bg-white p-2 shadow-xl",
+        "absolute z-20 min-w-[220px] rounded-2xl border border-rose-line/40 bg-white p-2 shadow-xl",
+        side === "top" ? "bottom-full mb-2" : "top-full mt-2",
         align === "right" ? "right-0" : "left-0",
         className,
       )}

@@ -5283,3 +5283,83 @@ MSG+.4.3 (rate limiting), MSG+.5.1 (анонімізація повідомле�
 live-оновлень) навіть без налаштованого Supabase. Для реального
 live-realtime користувачу все одно треба задати обидві env-змінні —
 цей фікс лише прибирає крах UI за їх відсутності.
+
+## ФАЗА MSG+, задача MSG+.7 — редизайн /messages під спліт-в'ю макет + MSG+.7.8 (07.09.2026)
+
+За прямим проханням користувача ("перебудуй розділ повідомлення щоб він
+виглядав як на макеті", пізніше того самого дня — "додай можливість
+додавати смайли і прикріпляти зображення в чаті і зону напишіть
+повідомлення зроби шириною на весь блок"). Деталі по чекбоксах —
+TASKS_DETAILED.md, розділ "MSG+.7".
+
+MSG+.7.1–.7.7 (редизайн під chatMockup.png): /messages і
+/messages/[conversationId] об'єднано в один спліт-в'ю екран
+(components/messages/MessagesSplitView.tsx, ConversationListPanel.tsx,
+ChatPanel.tsx — уся логіка чату 1:1 перенесена з колишнього
+[conversationId]/page.tsx, без зміни поведінки чи серверних викликів).
+Нове порівняно з попереднім UI: кнопка блокування під іконкою "..."
+(MoreVerticalIcon + Dropdown), пошук по вже завантаженій історії
+повідомлень (клієнтський фільтр). Кнопки "прикріпити файл"/"емодзі" на
+цьому кроці були лише disabled-заглушками за макетом.
+
+MSG+.7.8 (той самий день, доробка за прямим проханням користувача): три
+незалежні зміни поверх MSG+.7.4:
+
+1. Емодзі — нова components/messages/EmojiPickerDropdown.tsx: статичний
+   набір емодзі по категоріях (без нової npm-залежності), той самий
+   Dropdown, що вже меню "...". Вставка в позицію курсора textarea —
+   components/ui/Textarea.tsx переведено на forwardRef (зворотно
+   сумісно, жоден наявний виклик ref не передавав).
+2. Вкладення зображень у чаті — двоетапний Cloudinary-флоу, той самий
+   патерн, що ДЗ/сертифікати:
+   - prisma/schema.prisma + ручна SQL-міграція
+     20260907120000_message_images — nullable Message.imageUrl/
+     imagePublicId (той самий відомий виняток пісочниці щодо
+     binaries.prisma.sh — потребує prisma migrate deploy на
+     користувача);
+   - lib/storage/messageImageStorage.ts (новий) — saveMessageImage/
+     deleteMessageImage, public_id = messages/{conversationId}/{uuid},
+     deleteMessageImage свідомо не викликається автоматично (видалення
+     повідомлень поза MVP, MSG+.6);
+   - modules/messages/schema.ts — SendMessageSchema через .refine()
+     вимагає непорожнім РІВНО ОДНЕ з body/imageUrl (замість колишнього
+     .min(1) на самому body); нова UploadMessageImageSchema; нові
+     MESSAGE_IMAGE_MAX_SIZE_BYTES (5MB)/MESSAGE_IMAGE_ALLOWED_MIME_TYPES;
+   - modules/messages/uploadService.ts (новий, окремий від service.ts,
+     той самий поділ Node-залежностей, що
+     homeworkAssignments/uploadService.ts);
+   - modules/messages/service.ts — новий assertCanUploadMessageImage
+     (учасник розмови + перевірка блокування, спільний хелпер
+     assertNotBlockedInConversation, БЕЗ rate-limit); sendMessageService
+     передає imageUrl у repository.createMessage;
+   - repository.ts/actions.ts/index.ts — наскрізне протягування
+     imageUrl, нова uploadMessageImageAction;
+   - lib/realtime/useConversationRealtime.ts — BroadcastMessageRecord
+     доповнено imageUrl (сирий рядок з тригера й так ніс усі колонки);
+   - ChatPanel.tsx — робоча кнопка "скріпка" (прихований file input,
+     клієнтська валідація, миттєве прев'ю, фоновий аплоад, скасування),
+     зображення в бульбашці клікабельне (лайтбокс Modal
+     variant="media", той самий патерн, що сертифікати).
+   - Свідома межа: скарга на повідомлення (MSG+.4.1) знімає лише
+     текстовий messageBodySnapshot, зображення в знімок не потрапляє.
+3. Поле вводу на всю ширину — корінь бага: обгортка Textarea.tsx не
+   мала w-full, тому як flex-дочірній елемент поруч зі shrink-0-
+   кнопками рахувалась за вмістом, а не розтягувалась. Додано w-full
+   до самої обгортки компонента (впливає лише в flex-контекстах —
+   тут; у звичайному блоковому контексті інших викликів Textarea
+   нічого не змінює).
+
+Перевірено (07.09.2026): npm install пройшов (node_modules став
+доступний, на відміну від MSG+.7.1–.7.7 раніше того самого дня;
+postinstall/prisma generate все одно падає — 403 Forbidden до
+binaries.prisma.sh, той самий відомий виняток пісочниці, тому
+PrismaClient-типізація лишається заглушкою any, як і завжди тут).
+npx tsc --noEmit порівняно з базовою лінією ДО зміни — 24 передіснуючі
+помилки типізації через саме цю заглушку; після зміни — ті самі 24
+(лише зсув номера рядка однієї через додані коментарі), 0 нових.
+npx eslint . --max-warnings=0 — та сама 1 передіснуюча помилка
+(react-hooks/set-state-in-effect в ефекті завантаження історії
+повідомлень, ChatPanel.tsx) і те саме 1 передіснуюче попередження
+(невикористаний тип Message в useConversationRealtime.ts) — обидва
+існували ще до цієї задачі, нових немає. Сам prisma migrate deploy —
+і далі потребує ручного застосування на машині користувача/CI.

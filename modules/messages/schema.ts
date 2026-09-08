@@ -14,14 +14,47 @@ export const StartConversationSchema = z.object({
   recipientId: z.string().min(1, "Не вказано отримувача"),
 });
 
-export const SendMessageSchema = z.object({
+/**
+ * MSG+.7.8 (07.09.2026, за прямим проханням користувача) — `body` більше
+ * НЕ вимагає `.min(1)` на рівні самого поля: повідомлення-лише-з-
+ * зображенням (`imageUrl` заповнений, текст порожній) — так само
+ * валідне, як і повідомлення-лише-з-текстом. Замість цього — `.refine`
+ * нижче на рівні всього об'єкта: непорожнім має бути РІВНО ОДНЕ з двох
+ * (текст АБО зображення), не саме `body`. `imageUrl` тут — вже готовий
+ * Cloudinary URL з попереднього виклику `uploadMessageImageAction`
+ * (двоетапний флоу, той самий підхід, що вже `Article`/ДЗ-редактор:
+ * зображення завантажується ОКРЕМО від збереження тексту), а не сам
+ * файл — цю схему валідує сам `sendMessageAction`, файл вже пройшов
+ * `UploadMessageImageSchema`/`uploadService.ts` раніше.
+ */
+export const SendMessageSchema = z
+  .object({
+    conversationId: z.string().min(1, "Не вказано розмову"),
+    body: z.string().trim().max(4000, "Повідомлення занадто довге (максимум 4000 символів)"),
+    imageUrl: z.string().url().nullable().optional(),
+  })
+  .refine((data) => data.body.length > 0 || !!data.imageUrl, {
+    message: "Повідомлення не може бути порожнім",
+    path: ["body"],
+  });
+
+/** MSG+.7.8 — завантаження зображення, яке користувач прикріплює до повідомлення, ПЕРЕД самим надсиланням (той самий двоетапний флоу, що вже `uploadHomeworkImageAction`). */
+export const UploadMessageImageSchema = z.object({
   conversationId: z.string().min(1, "Не вказано розмову"),
-  body: z
-    .string()
-    .trim()
-    .min(1, "Повідомлення не може бути порожнім")
-    .max(4000, "Повідомлення занадто довге (максимум 4000 символів)"),
 });
+
+/**
+ * Ліміти для зображення-вкладення в повідомленні — той самий підхід
+ * (окрема константа на модуль), що `HOMEWORK_IMAGE_MAX_SIZE_BYTES`/
+ * `CERTIFICATE_MAX_SIZE_BYTES`. 5MB — той самий ліміт, що аватарка
+ * (контент у бульбашці чату, не повнорозмірний документ).
+ */
+export const MESSAGE_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+export const MESSAGE_IMAGE_ALLOWED_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+] as const;
 
 export const ListMessagesSchema = z.object({
   conversationId: z.string().min(1, "Не вказано розмову"),
@@ -72,6 +105,7 @@ export const AdminReportIdSchema = z.object({
 
 export type StartConversationInput = z.infer<typeof StartConversationSchema>;
 export type SendMessageInput = z.infer<typeof SendMessageSchema>;
+export type UploadMessageImageInput = z.infer<typeof UploadMessageImageSchema>;
 export type ListMessagesInput = z.infer<typeof ListMessagesSchema>;
 export type MarkConversationReadInput = z.infer<typeof MarkConversationReadSchema>;
 export type BlockUserInput = z.infer<typeof BlockUserSchema>;
@@ -137,6 +171,8 @@ export interface Message {
   senderId: string | null;
   senderLabel: string | null;
   body: string;
+  /** MSG+.7.8 — Cloudinary URL вкладеного зображення, `null` для звичайного текстового повідомлення. */
+  imageUrl: string | null;
   createdAt: Date;
   sender: MessageParticipant | null;
 }
