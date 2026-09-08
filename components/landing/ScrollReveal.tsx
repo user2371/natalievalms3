@@ -28,7 +28,12 @@ interface ScrollRevealProps {
  *
  * SSR/відсутність `IntersectionObserver` (дуже старі браузери) →
  * одразу `isVisible = true`, контент просто видно без анімації, замість
- * "зламаного" вічно прихованого блоку.
+ * "зламаного" вічно прихованого блоку. `setTimeout(…, 0)` тут навмисно
+ * (а не прямий виклик `setIsVisible` у тілі ефекту) — білд на Vercel
+ * валив цю задачу лінтом `react-hooks` ("Calling setState synchronously
+ * within an effect can trigger cascading renders"): синхронний
+ * `setState` прямо в тілі ефекту (поза колбеком зовнішньої системи, як
+ * у `IntersectionObserver` нижче) саме такий лінтер і ловить.
  */
 export function ScrollReveal({
   children,
@@ -43,8 +48,8 @@ export function ScrollReveal({
     if (!node) return;
 
     if (typeof IntersectionObserver === "undefined") {
-      setIsVisible(true);
-      return;
+      const timeoutId = setTimeout(() => setIsVisible(true), 0);
+      return () => clearTimeout(timeoutId);
     }
 
     const observer = new IntersectionObserver(
